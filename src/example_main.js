@@ -14,7 +14,8 @@ const DINO_POSITION = { x: 80, y: 278 };
 const GROUND_POSITION = { x: 1, y: 279 };
 const ELEMENT_SCANNER = { start: { x: 490, y: 191 }, end: { x: 490, y: 272 }};
 
-robot.screen.capture(0, 0, 1, 1);
+robot.screen.capture(0, 0, 1, 1)
+
 robot.setMouseDelay(0);
 
 function Scanner(config) {
@@ -35,13 +36,14 @@ function Scanner(config) {
             const height = ELEMENT_SCANNER.end.y - ELEMENT_SCANNER.start.y;
             const capture = robot.screen.capture(ELEMENT_SCANNER.start.x, ELEMENT_SCANNER.start.y, 1, height);
             const ratioY = capture.height / height;
+
             let activate = false;
             let pixels = [];
 
-            for(let y = 0; y < height; y++) {
-                const yPosition = ELEMENT_SCANNER.start.y + y;
-                // robot.moveMouse(ELEMENT_SCANNER.start.x, yPosition);
-                const color = capture.colorAt(0, y * ratioY);
+            for(let yRelative = 0; yRelative < height; yRelative++) {
+                const yAbsolute = ELEMENT_SCANNER.start.y + yRelative;
+                // robot.moveMouse(ELEMENT_SCANNER.start.x, yAbsolute);
+                const color = capture.colorAt(0, yRelative * ratioY);
 
                 if(TRACKING_COLORS.includes(color)) {
                     if (!state.run) {
@@ -49,13 +51,13 @@ function Scanner(config) {
                     }
 
                     if (state.run) {
-                        pixels.push({x: ELEMENT_SCANNER.start.x, y: yPosition})
-                        if (yPosition < state.y.max) {
-                            state.y.max = yPosition;
+                        pixels.push({x: ELEMENT_SCANNER.start.x, y: yAbsolute})
+                        if (yAbsolute < state.y.max) {
+                            state.y.max = yAbsolute;
                         }
 
-                        if (yPosition > state.y.min) {
-                            state.y.min = yPosition;
+                        if (yAbsolute > state.y.min) {
+                            state.y.min = yAbsolute;
                         }
                     }
                     
