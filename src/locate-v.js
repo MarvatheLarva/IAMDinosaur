@@ -1,8 +1,8 @@
 const robot = require('robotjs');
 const { saveCapture, measure, sleep } = require('./utils');
 robot.setMouseDelay(0);
-const COLOR_GROUND = '535353';
-const COLOR_BACKGROUND = 'ffffff';
+const COLOR_GROUND = 'acacac';
+const COLOR_BACKGROUND = '202124';
 
 robot.screen.capture(0, 0, 1, 1);
 
