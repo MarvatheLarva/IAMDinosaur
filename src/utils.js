@@ -20,14 +20,18 @@ exports.saveCapture = async (capture, path) => {
     });
 }
 
-exports.measure = async (callback, description) => {
+exports.measure = async (callback, description, log, threshold) => {
     const hrstart = process.hrtime();
     
     await callback();
 
     const hrend = process.hrtime(hrstart);
     
-    console.info(`Execution ${description} time (hr): %ds %dms`, hrend[0], hrend[1] / 1000000)
+    if (log && log.debug)
+        console.info(`Execution ${description} time (hr): %ds %dms`, hrend[0], Math.trunc(hrend[1] / 1000000))
+    if (log && log.warning && threshold && threshold < (hrend[0] * 1000 + hrend[1] / 1000000))
+        console.info(`WARNING - Execution ${description} time (hr): %ds %dms`, hrend[0], Math.trunc(hrend[1] / 1000000))
+
 }
 
 exports.sleep = require('util').promisify(setTimeout);

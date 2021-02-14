@@ -1,5 +1,5 @@
 const robot = require('robotjs');
-const { saveCapture, measure, sleep } = require('./utils');
+const { saveCapture, measure, sleep } = require('../src/utils');
 robot.setMouseDelay(0);
 
 (async () => {

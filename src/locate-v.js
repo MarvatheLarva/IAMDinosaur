@@ -52,12 +52,12 @@ robot.screen.capture(0, 0, 1, 1);
         const { width, height } = robot.getScreenSize();
 
         // Search for specific ground color pixel
-        
-        //console.log('found Ground position at', ground);
+        const ground = getGround(width, height);
+        console.log('found Ground position at', ground);
 
-        getDino(getGround(width, height), width);
+        const dino = getDino(ground, width);
 
-        //console.log('found Dino position at', dino);
+        console.log('found Dino position at', dino);
     }, 'Total duration');
 })()
 .catch((data) => {
