@@ -35,3 +35,14 @@ exports.measure = async (callback, description, log, threshold) => {
 }
 
 exports.sleep = require('util').promisify(setTimeout);
+
+exports.Context = (initContext) => {
+    let context = Object.assign({}, initContext);
+
+    return {
+        context,
+        resetContext: () => {
+            return context = Object.assign({}, initContext);
+        }
+    }
+}
