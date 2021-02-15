@@ -5,15 +5,15 @@ const omit = require('lodash/omit');
 
 const DEBUG = false;
 const WARNING = true;
-const THRESHOLD = 14;
-const FREQUENCY = 16;
+const FREQUENCY = 1000/60;
+const THRESHOLD = FREQUENCY - FREQUENCY * 0.3;
 
 const TRACKING_COLORS = ['acacac', '535353'];
 
 // @todo COMPUTE those data position
 const DINO_POSITION = { x: 80, y: 278 };
 const GROUND_POSITION = { x: 1, y: 279 };
-const ELEMENT_SCANNER = { start: { x: 490, y: 191 }, end: { x: 490, y: 272 }};
+const ELEMENT_SCANNER = { start: { x: 490, y: 191 }, end: { x: 490, y: 276 }};
 
 robot.screen.capture(0, 0, 1, 1)
 
@@ -44,7 +44,7 @@ function Scanner(config) {
 
             for(let yRelative = 0; yRelative < height; yRelative++) {
                 const yAbsolute = ELEMENT_SCANNER.start.y + yRelative;
-                robot.moveMouse(ELEMENT_SCANNER.start.x, yAbsolute);
+                //robot.moveMouse(ELEMENT_SCANNER.start.x, yAbsolute);
                 const color = capture.colorAt(0, yRelative * ratioY);
 
                 if(TRACKING_COLORS.includes(color)) {
@@ -76,7 +76,7 @@ function Scanner(config) {
             }
         },
         distance: async (element) => {
-            const yRelative = element.y.min - element.height/2;
+            const yRelative = element.vertical.min - (element.size.height / 2);
             const width = ELEMENT_SCANNER.start.x - DINO_POSITION.x;
             const capture = robot.screen.capture(DINO_POSITION.x, yRelative, width, 1);
             const ratioX = capture.width / width;
@@ -84,7 +84,7 @@ function Scanner(config) {
             for (let xRelative = 0; xRelative < width; xRelative++) {
                 const color = capture.colorAt(xRelative * ratioX , 0);
                 if (TRACKING_COLORS.includes(color)) {
-                    robot.moveMouse(DINO_POSITION.x + xRelative, yRelative);
+                    // robot.moveMouse(DINO_POSITION.x + xRelative, yRelative);
 
                     return xRelative;
                 }
@@ -104,14 +104,14 @@ function Scanner(config) {
 
     const scannerConfig = {};
 
-    const scanner = Scanner(scannerConfig);
+    const scanner2 = Scanner(scannerConfig);
 
-    // const scanner = ScannerObstacle({
-    //     position: ELEMENT_SCANNER,
-    //     tracking: {
-    //         colors: TRACKING_COLORS
-    //     }
-    // });
+    const scanner = ScannerObstacle({
+        position: ELEMENT_SCANNER,
+        tracking: {
+            colors: TRACKING_COLORS
+        }
+    });
 
     const tick = setInterval(async () => {
         const log = {
@@ -121,36 +121,39 @@ function Scanner(config) {
 
         await measure(async () => {
             await measure(async () => {
-                const element = await scanner.element();
-                if (element) { console.log(element), context.elements.push(element) }
+                const element = await scanner();
+                if (element) { 
+                    // console.log(element.size);
+                    context.elements.push(element)
+                }
             }, 'Scan Element incoming', log);
 
-            // if (!context.current && context.elements.length) {
-            //     context.current = context.elements.shift();
-            //     context.currentWidth = context.current.width;
-            //     // console.log(context.current);
-            // }
+            if (!context.current && context.elements.length) {
+                context.current = context.elements.shift();
+                context.currentWidth = context.current.size.width;
+                // console.log(context.current);
+            }
 
-            // if (context.current) {
-            //     await measure(async () => {
-            //         const distance = await scanner.distance(context.current);
-            //         // process.stdout.write(`${ distance } px remaing\n`);
-            //         // console.log('distance: ', distance);
-            //         if (!context.passthrough && 0 === distance) {
-            //             context.passthrough = true;
-            //         }
+            if (context.current) {
+                await measure(async () => {
+                    const distance = await scanner2.distance(context.current);
+                    // process.stdout.write(`${ distance } px remaing\n`);
+                    // console.log('distance: ', distance);
+                    if (!context.passthrough && 0 === distance) {
+                        context.passthrough = true;
+                    }
 
-            //         if (context.passthrough) {
-            //             // console.log('width', context.currentWidth);
-            //             if (context.currentWidth === 0) {
-            //                 context.current = null;
-            //                 context.passthrough = false;
-            //             } else {
-            //                 context.currentWidth--;
-            //             }
-            //         }
-            //     }, 'Scan Distance from Element', log)
-            // }
+                    if (context.passthrough) {
+                        // console.log('width', context.currentWidth);
+                        if (context.currentWidth === 0) {
+                            context.current = null;
+                            context.passthrough = false;
+                        } else {
+                            context.currentWidth--;
+                        }
+                    }
+                }, 'Scan Distance from Element', log)
+            }
         }, 'Tick', log, THRESHOLD)
     }, FREQUENCY);
 })()

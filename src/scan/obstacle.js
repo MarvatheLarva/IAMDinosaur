@@ -1,19 +1,5 @@
 const robot = require('robotjs');
 
-function initContext() {
-    return {
-        recording: false,
-        vertical: {
-            min: 0,
-            max: Infinity,
-            height: 0
-        },
-        horizontal: {
-            width: 0
-        }
-    };
-}
-
 // config: {
 //     position: {
 //         start: { x: 0, y: 0 },
@@ -24,10 +10,23 @@ function initContext() {
 //     }
 // }
 exports.ScannerObstacle = (config) => {
-    let context = initContext();
-    console.log(context);
+    function Context() {
+        return {
+            recording: false,
+            vertical: {
+                min: 0,
+                max: Infinity,
+            },
+            size: {
+                height: 0,
+                width: 0
+            }
+        }
+    }
 
-    return async () => {
+    let context = Context();
+
+    return async function() {
         const height = config.position.end.y - config.position.start.y;
         const capture = robot.screen.capture(config.position.start.x, config.position.start.y, 1, height);
         const ratioY = capture.height / height;
@@ -36,10 +35,10 @@ exports.ScannerObstacle = (config) => {
 
         for(let yRelative = 0; yRelative < height; yRelative++) {
             const yAbsolute = config.position.start.y + yRelative;
-            robot.moveMouse(config.position.start.x, yAbsolute);
+            // robot.moveMouse(config.position.start.x, yAbsolute);
 
             if(config.tracking.colors.includes(capture.colorAt(0, yRelative * ratioY))) {
-                if (!context.recording) { context.recording = true }
+                if (!context.recording) { context.recording = true; }
 
                 if (context.recording) {
                     if (yAbsolute < context.vertical.max) { context.vertical.max = yAbsolute }
@@ -52,13 +51,12 @@ exports.ScannerObstacle = (config) => {
         }
 
         if (context.recording) {
-            context.horizontal.width++;
-
+            context.size.width++;
             if (!activate) {
-                context.vertical.height = context.vertical.min - context.vertical.max;
+                context.size.height = context.vertical.min - context.vertical.max;
                 const element = Object.assign({}, context);
 
-                context = initContext();
+                context = Context();
 
                 return element;
             }
