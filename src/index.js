@@ -1,9 +1,8 @@
 const robot = require('robotjs');
 const { measure } = require('./utils');
-const { ScannerObstacle } = require('./scan/obstacle');
-const omit = require('lodash/omit');
+const { Obstacle } = require('./scan/obstacle');
 
-const DEBUG = false;
+const DEBUG = true;
 const WARNING = true;
 const FREQUENCY = 1000/60;
 const THRESHOLD = FREQUENCY - FREQUENCY * 0.3;
@@ -19,62 +18,27 @@ robot.screen.capture(0, 0, 1, 1)
 
 robot.setMouseDelay(0);
 
-function initState() {
-    return {
-        run: false,
-        pixels: [],
-        y: {
-            min: 0,
-            max: 100000
+async function saveElement(pixels, name) {
+    let data = '';
+
+    for (let y = 0; y < pixels[0].length; y++) {
+        let line = [];
+        for (let x = 0; x < pixels.length; x++) {
+            line.push(pixels[x][y]);
         }
+        if (line.filter(e => e  === 'x').length)
+            data += `${line.join('')}\n\r`;
     }
+
+    require('fs').writeFile(`./elements/${name}.txt`, data, () => {});
+}
+
+async function saveElement2(pixels, name) {
+    require('fs').writeFile(`./elements/${name}.txt`, pixels.map(e => e.join('')).join('\n\r'), () => {});
 }
 
 function Scanner(config) {
-    let state = initState();
-
     return {
-        element: async () => {
-            const height = ELEMENT_SCANNER.end.y - ELEMENT_SCANNER.start.y;
-            const capture = robot.screen.capture(ELEMENT_SCANNER.start.x, ELEMENT_SCANNER.start.y, 1, height);
-            const ratioY = capture.height / height;
-
-            let activate = false;
-            let pixels = [];
-
-            for(let yRelative = 0; yRelative < height; yRelative++) {
-                const yAbsolute = ELEMENT_SCANNER.start.y + yRelative;
-                //robot.moveMouse(ELEMENT_SCANNER.start.x, yAbsolute);
-                const color = capture.colorAt(0, yRelative * ratioY);
-
-                if(TRACKING_COLORS.includes(color)) {
-                    if (!state.run)
-                        state.run = true;
-
-                    if (state.run) {
-                        pixels.push({x: ELEMENT_SCANNER.start.x, y: yAbsolute})
-                        if (yAbsolute < state.y.max)
-                            state.y.max = yAbsolute;
-
-                        if (yAbsolute > state.y.min)
-                            state.y.min = yAbsolute;
-                    }
-                    
-                    if (!activate)
-                        activate = true;
-                }
-            }
-
-            if (state.run) {
-                state.pixels.push(pixels);
-                if (!activate) {
-                    const element = Object.assign({},omit(state, ['pixels']), { width: state.pixels.length, height: state.y.min - state.y.max});
-                    state = initState();
-    
-                    return element;
-                }
-            }
-        },
         distance: async (element) => {
             const yRelative = element.vertical.min - (element.size.height / 2);
             const width = ELEMENT_SCANNER.start.x - DINO_POSITION.x;
@@ -106,13 +70,13 @@ function Scanner(config) {
 
     const scanner2 = Scanner(scannerConfig);
 
-    const scanner = ScannerObstacle({
+    const scanObscacle = Obstacle({
         position: ELEMENT_SCANNER,
         tracking: {
             colors: TRACKING_COLORS
         }
     });
-
+    let count = 0;
     const tick = setInterval(async () => {
         const log = {
             debug: DEBUG,
@@ -121,12 +85,14 @@ function Scanner(config) {
 
         await measure(async () => {
             await measure(async () => {
-                const element = await scanner();
+                const element = await scanObscacle();
                 if (element) { 
-                    // console.log(element.size);
-                    context.elements.push(element)
+                    // count++;
+                    // saveElement(element.pixels, `${count}-tracing`);
+                    // saveElement2(element.pixelsCaptured, `${count}-captured`);
+                    // context.elements.push(element)
                 }
-            }, 'Scan Element incoming', log);
+            }, 'Scan-Element-incoming', log);
 
             if (!context.current && context.elements.length) {
                 context.current = context.elements.shift();
@@ -134,26 +100,26 @@ function Scanner(config) {
                 // console.log(context.current);
             }
 
-            if (context.current) {
-                await measure(async () => {
-                    const distance = await scanner2.distance(context.current);
-                    // process.stdout.write(`${ distance } px remaing\n`);
-                    // console.log('distance: ', distance);
-                    if (!context.passthrough && 0 === distance) {
-                        context.passthrough = true;
-                    }
+            // if (context.current) {
+            //     await measure(async () => {
+            //         const distance = await scanner2.distance(context.current);
+            //         // process.stdout.write(`${ distance } px remaing\n`);
+            //         // console.log('distance: ', distance);
+            //         if (!context.passthrough && 0 === distance) {
+            //             context.passthrough = true;
+            //         }
 
-                    if (context.passthrough) {
-                        // console.log('width', context.currentWidth);
-                        if (context.currentWidth === 0) {
-                            context.current = null;
-                            context.passthrough = false;
-                        } else {
-                            context.currentWidth--;
-                        }
-                    }
-                }, 'Scan Distance from Element', log)
-            }
+            //         if (context.passthrough) {
+            //             // console.log('width', context.currentWidth);
+            //             if (context.currentWidth === 0) {
+            //                 context.current = null;
+            //                 context.passthrough = false;
+            //             } else {
+            //                 context.currentWidth--;
+            //             }
+            //         }
+            //     }, 'Scan Distance from Element', log)
+            // }
         }, 'Tick', log, THRESHOLD)
     }, FREQUENCY);
 })()

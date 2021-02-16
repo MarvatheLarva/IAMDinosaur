@@ -4,15 +4,15 @@ exports.saveCapture = async (capture, path) => {
     return new Promise((resolve, reject) => {
         try {
             const filename = Date.now();
-            const image = new Jimp(capture.width, capture.height);
-            let pos = 0;
-            image.scan(0, 0, image.bitmap.width, image.bitmap.height, (x, y, idx) => {
-                image.bitmap.data[idx + 2] = capture.image.readUInt8(pos++);
-                image.bitmap.data[idx + 1] = capture.image.readUInt8(pos++);
-                image.bitmap.data[idx + 0] = capture.image.readUInt8(pos++);
-                image.bitmap.data[idx + 3] = capture.image.readUInt8(pos++);
-            });
-            image.write(`${path}/${filename}.jpg`, resolve);
+            const pixelsShit = [];
+            for (let y = 0; y < capture.height; y++) {
+                const captured = [];
+                for (let x = 0; x < capture.width; x++) {
+                    pixelsShit.push(`<div style="width:1px;height:1px;position:absolute;top:${y}px;left:${x}px;background:#${context.captureObstacle.colorAt(x, y)};"></div>`);
+                }
+            }
+
+            require('fs').writeFile(`${path}/${filename}.html`, `<html><body>${pixelsShit.join('')}</body></html>`, () => {});
         } catch (e) {
             console.error(e);
             reject(e);
@@ -32,6 +32,7 @@ exports.measure = async (callback, description, log, threshold) => {
     if (log && log.warning && threshold && threshold < (hrend[0] * 1000 + hrend[1] / 1000000))
         console.info(`WARNING - Execution ${description} time (hr): %ds %dms`, hrend[0], Math.trunc(hrend[1] / 1000000))
 
+    require('fs').writeFile(`./debug-${description}.log`, `time ${hrend[0]}s ${Math.trunc(hrend[1] / 1000000)}ms`, () => {})
 }
 
 exports.sleep = require('util').promisify(setTimeout);
