@@ -1,9 +1,9 @@
 const { EventEmitter } = require('events');
 const robot = require('robotjs');
 const omit = require('lodash/omit');
+const udp = require('dgram');
 
-
-const COMPRESSOR = 2;
+const COMPRESSOR = 3;
 const FREQUENCY = 1000/130;
 
 // config: {
@@ -27,20 +27,26 @@ exports.Sensor = (config) => {
         return {
             reset: () => {
                 const data = Object.assign({}, omit(localState, ['match']))
-                localState = Object.assign({}, initialState)
-                    return data;
+                localState = Object.assign({}, initialState);
+                localState = {
+                    activate: { on: null, off: null },
+                    position: { x: null, y: null },
+                    match: false
+                };
+                
+                return data;
             },
             isActive: () => !!localState.on,
             onActivate: (x, y) => {
-                localState.on = Date.now();
+                localState.activate.on = Date.now();
                 localState.position = {x, y};
             },
-            offActivate: () => localState.off = Date.now(),
+            offActivate: () => localState.activate.off = Date.now(),
             match: () => localState.match = true,
             unmatch: () => localState.match = false,
             finish: () => {
-                if (localState.on && !localState.match) {
-                    localState.off = Date.now();
+                if (localState.activate.on && !localState.match) {
+                    localState.activate.off = Date.now();
 
                     return true;
                 }
@@ -49,10 +55,7 @@ exports.Sensor = (config) => {
             }
         }
     })({
-        // activate: {
-            on: null, // null || Date.now()
-            off: null, // null || Date.now()
-        // },
+        activate: { on: null, off: null },
         position: { x: null, y: null },
         match: false
     })
@@ -63,25 +66,14 @@ exports.Sensor = (config) => {
                 const capture = ((x, y, width, height) => {
                     const screenCapture = robot.screen.capture(x, y, width, height);
                     const converters = {
-                        relative: {
-                            x: (absolute) => absolute - x,
-                            y: (absolute) => absolute - y,
-                        },
-                        absolute: {
-                            x: (relative) => x + relative,
-                            y: (relative) => y + relative,
-                        }
+                        relative: { x: (absolute) => absolute - x, y: (absolute) => absolute - y },
+                        absolute: { x: (relative) => x + relative, y: (relative) => y + relative }
                     }
-                    const ratio = {
-                        x: screenCapture.width / width,
-                        y: screenCapture.height / height,
-                    };
+                    const ratio = { x: screenCapture.width / width, y: screenCapture.height / height };
 
                     return {
                         screen: screenCapture,
-                        colorAt: (x, y) => {
-                            return screenCapture.colorAt(x * ratio.x, y * ratio.y)
-                        },
+                        colorAt: (x, y) => { return screenCapture.colorAt(x * ratio.x, y * ratio.y) },
                         ratio,
                         converters
                     }
@@ -127,6 +119,7 @@ exports.Sensor = (config) => {
     }
 }
 
+const client = udp.createSocket('udp4');
 function measure(func, config) {
     const start = process.hrtime.bigint();
     
@@ -134,25 +127,17 @@ function measure(func, config) {
 
     const end = process.hrtime.bigint();
 
-    const ms = Math.trunc(Number(end - start) / 1000000);
+    const time = Number(end - start); // nano seconds
+    
+    var data = Buffer.from(JSON.stringify({ name: config.name, measure: time, threshold: config.threshold }));
 
-    if (config.debug) {
-        console.info(`Execution ${config.name} time: %dms`, ms)
-    }
+    // console.log(config.threshold);
+    var dataTest = Buffer.from(JSON.stringify({ name: 'test', measure: time, threshold: config.threshold }));
+    var dataTest2 = Buffer.from(JSON.stringify({ name: 'test2', measure: time, threshold: config.threshold }));
+    var dataTest3 = Buffer.from(JSON.stringify({ name: 'test3', measure: time, threshold: config.threshold }));
 
-    if (config.warning && config.threshold && ms > config.threshold) {
-        console.info(`WARNING - Execution ${config.name} time: %dms > %dms`, ms, Math.trunc(config.threshold))
-    }
+    client.send(data, 2222, 'localhost');
+    client.send(dataTest2, 2222, 'localhost');
+    client.send(dataTest, 2222, 'localhost');
+    client.send(dataTest3, 2222, 'localhost');
 }
-
-// // Example
-// const sensorA = Sensor({
-//     identity: 'A',
-//     tracker: { colors: ['acacac', '535353'] },
-//     position: { x: 490, y: 191 },
-//     size: { width: 1, height: 85 }
-// });
-
-// sensorA((state) => {
-//     // (process / store) state, for next step
-// })

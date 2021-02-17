@@ -4,8 +4,8 @@ const { Sensor } = require('./scan/sensor');
 const sensorA = Sensor({
     identity: 'A',
     tracker: { colors: ['acacac', '535353'] },
-    position: { x: 490, y: 191 },
-    size: { width: 1, height: 85 }
+    position: { x: 490, y: 190 },
+    size: { width: 1, height: 80 }
 });
 
 sensorA((state) => {
