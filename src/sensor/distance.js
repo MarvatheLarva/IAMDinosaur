@@ -4,12 +4,16 @@ const { converters } = require('../utils.js');
 
 exports.Distance = () => {
 
+    const state = {
+        active: false
+    }
+
     function compute(element) {
 
     }
 
     return (callback) => {
-        setInterval(() => {
+        const interval = setInterval(() => {
             probe(probeConfig, config.monitoring.client, async () => {
                 callback(compute);
             });

@@ -5,6 +5,8 @@ const omit = require('lodash/omit');
 const { probe, PROBE_TYPES } = require('../monitoring/probe.js');
 const { converters } = require('../utils.js');
 
+robot.setMouseDelay(500)
+
 // config: {
 //     identity: string,
 //     frequency: number,
@@ -24,7 +26,7 @@ const { converters } = require('../utils.js');
 // }
 
 exports.Gate = (config) => {
-    const COMPRESSOR = 3;
+    const COMPRESSOR = 2;
 
     const emitter = new EventEmitter();
     const context = (() => {
@@ -50,6 +52,7 @@ exports.Gate = (config) => {
                 state.position = {x, y};
             },
             exit: () => {
+                // console.log(state.match);
                 if (state.activate.on && !state.match) {
                     state.activate.off = Date.now();
 
@@ -57,7 +60,8 @@ exports.Gate = (config) => {
                 }
 
                 return false;
-            }
+            },
+            match: (match) => state.match = match
         }
     })()
 
@@ -87,18 +91,37 @@ exports.Gate = (config) => {
                     }
                 })(config.position.x, config.position.y, config.size.width, config.size.height);
 
-                context.match = false;
+                context.match(false);
+                
+                const height = config.size.height / COMPRESSOR;
 
                 for (let x = 0; x < config.size.width; x++) {
                     if (((context) => {
-                        for (let yCompressed = 0; yCompressed < config.size.height / COMPRESSOR; yCompressed++) {
+                        for (let yCompressed = 0; yCompressed < Math.trunc(height / 2); yCompressed++) {
                             const y = yCompressed * COMPRESSOR;
 
+                            // console.log(config.size.height / COMPRESSOR, y, Math.trunc(height - y));
+                            // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
+
                             if (true === config.tracker.colors.includes(capture.colorAt(x, y))) {
-                                context.match = true;
+                                context.match(true);
 
                                 if (false === context.isEnter()) {
                                     context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
+
+                                    return true;
+                                }
+
+                                return false;
+                            }
+
+                            // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(Math.trunc(height * 2 - y - 1)));
+                            // console.log(Math.trunc(height * 2 - y));
+                            if (true === config.tracker.colors.includes(capture.colorAt(x, Math.trunc(height * 2 - y - 1)))) {
+                                context.match(true);
+
+                                if (false === context.isEnter()) {
+                                    context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(height * 2 - y - 1));
 
                                     return true;
                                 }

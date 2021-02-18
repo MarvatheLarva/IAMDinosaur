@@ -8,11 +8,11 @@ exports.saveCapture = async (capture, path) => {
             for (let y = 0; y < capture.height; y++) {
                 const captured = [];
                 for (let x = 0; x < capture.width; x++) {
-                    pixelsShit.push(`<div style="width:1px;height:1px;position:absolute;top:${y}px;left:${x}px;background:#${context.captureObstacle.colorAt(x, y)};"></div>`);
+                    pixelsShit.push(`<div style="width:1px;height:1px;position:absolute;top:${y}px;left:${x}px;background:#${capture.colorAt(x, y)};"></div>`);
                 }
             }
 
-            require('fs').writeFile(`${path}/${filename}.html`, `<html><body>${pixelsShit.join('')}</body></html>`, () => {});
+            require('fs').writeFile(`${path}/${filename}.html`, `<html><body style="background:red;">${pixelsShit.join('')}</body></html>`, () => {});
         } catch (e) {
             console.error(e);
             reject(e);
