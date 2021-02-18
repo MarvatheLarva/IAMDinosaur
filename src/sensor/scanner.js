@@ -1,0 +1,5 @@
+exports.Scanner = () => {
+    return () => {
+
+    }
+}

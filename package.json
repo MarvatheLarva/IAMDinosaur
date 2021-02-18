@@ -2,6 +2,7 @@
   "dependencies": {
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.8.21",
+    "colors": "^1.4.0",
     "jimp": "^0.16.1",
     "robotjs": "^0.6.0",
     "synaptic": "^1.1.4"

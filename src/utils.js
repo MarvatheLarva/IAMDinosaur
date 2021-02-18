@@ -47,3 +47,8 @@ exports.Context = (initContext) => {
         }
     }
 }
+
+exports.converters = {
+    nanoseconds: (milliseconds) => milliseconds * 1000000,
+    milliseconds: (nanoseconds) => nanoseconds / 1000000
+}
