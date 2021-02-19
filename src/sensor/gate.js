@@ -5,7 +5,7 @@ const omit = require('lodash/omit');
 const { probe, PROBE_TYPES } = require('../monitoring/probe.js');
 const { converters } = require('../utils.js');
 
-robot.setMouseDelay(500)
+robot.setMouseDelay(10)
 
 // config: {
 //     identity: string,
@@ -26,44 +26,10 @@ robot.setMouseDelay(500)
 // }
 
 exports.Gate = (config) => {
-    const COMPRESSOR = 2;
-
     const emitter = new EventEmitter();
-    const context = (() => {
-        const state = {
-            activate: { on: null, off: null },
-            position: { x: null, y: null },
-            match: false
-        };
 
-        return {
-            reset: () => {
-                const data = Object.assign({}, omit(state, ['match']))
-
-                state.activate =  { on: null, off: null },
-                state.position =  { x: null, y: null },
-                state.match = false
-                
-                return data;
-            },
-            isEnter: () => !!state.activate.on,
-            enter: (x, y) => {
-                state.activate.on = Date.now();
-                state.position = {x, y};
-            },
-            exit: () => {
-                // console.log(state.match);
-                if (state.activate.on && !state.match) {
-                    state.activate.off = Date.now();
-
-                    return true;
-                }
-
-                return false;
-            },
-            match: (match) => state.match = match
-        }
-    })()
+    const TOLERANCE = 5;
+    const COMPRESSOR = 2;
 
     const probeConfig = {
         type: PROBE_TYPES.time,
@@ -71,6 +37,49 @@ exports.Gate = (config) => {
         max: converters.nanoseconds(config.frequency),
         threshold: converters.nanoseconds(config.threshold)
     };
+
+    const context = (() => {
+        const state = {
+            activate: { on: null, off: null, matched: 0 },
+            position: { x: null, y: null },
+            match: false,
+            tolerance: 0
+        };
+
+        return {
+            reset: () => {
+                const data = Object.assign({}, omit(state, ['match']))
+
+                state.activate =  { on: null, off: null, matched: 0 };
+                state.position =  { x: null, y: null };
+                state.match = false;
+                state.tolerance = 0;
+
+                return data;
+            },
+            isEnter: () => !!state.activate.on,
+            enter: (x, y) => {
+                state.activate.on = Date.now();
+                state.position = {x, y};
+
+                return true;
+            },
+            exit: () => {
+                if (state.activate.on && !state.match && state.tolerance >= TOLERANCE) {
+                    state.activate.off = Date.now();
+
+                    return true;
+                }
+
+                if (state.activate.on && !state.match) {
+                    state.tolerance++;
+                }
+
+                return false;
+            },
+            match: (match) => {state.match = match; !match ? null : state.activate.matched++ ;}
+        }
+    })()
 
     emitter.on('start', () => {
         setInterval(() => {
@@ -93,38 +102,69 @@ exports.Gate = (config) => {
 
                 context.match(false);
                 
-                const height = config.size.height / COMPRESSOR;
+                const height = Math.trunc((config.size.height - 1) / 3);
 
                 for (let x = 0; x < config.size.width; x++) {
-                    if (((context) => {
-                        for (let yCompressed = 0; yCompressed < Math.trunc(height / 2); yCompressed++) {
+                    if (await (async (context) => {
+                        for (let yCompressed = height / COMPRESSOR; yCompressed >= 0; yCompressed--) {
                             const y = yCompressed * COMPRESSOR;
+                            const middleY = (height + y) + 1;
+                            const bottomY = (2 * height + y) + 2;
 
-                            // console.log(config.size.height / COMPRESSOR, y, Math.trunc(height - y));
+                            // const y = yCompressed;
+                            // const middleY = (height + y + 1);
+                            // const bottomY = (2 * height + y + 2);
+
+                            // console.log(y, middleY, bottomY);
+
+                            const topTracker = new Promise((res, rej) => {
+                                return res(true === config.tracker.colors.includes(capture.colorAt(x, y)))
+                            })
+
+                            const middleTracker = new Promise((res, rej) => {
+                                return res(true === config.tracker.colors.includes(capture.colorAt(x, middleY)))
+                            })
+
+                            const bottomTracker = new Promise((res, rej) => {
+                                // console.log(config.size.height - y);
+                                // res(false);
+                                return res(true === config.tracker.colors.includes(capture.colorAt(x, bottomY)))
+                            })
+
+                            const [top, bottom, middle] = await Promise.all([topTracker, bottomTracker, middleTracker])
+
+                            // const [ top ] = await Promise.all([topTracker])
+
+                            // const top = true === config.tracker.colors.includes(capture.colorAt(x, y));
+                            // const middle = true === config.tracker.colors.includes(capture.colorAt(x, middleY));
+                            // const bottom  = true === config.tracker.colors.includes(capture.colorAt(x, bottomY));
+
                             // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
 
-                            if (true === config.tracker.colors.includes(capture.colorAt(x, y))) {
+                            if (top) {
                                 context.match(true);
 
-                                if (false === context.isEnter()) {
-                                    context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
-
-                                    return true;
-                                }
+                                if (false === context.isEnter()) { return context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(y)); }
 
                                 return false;
                             }
 
-                            // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(Math.trunc(height * 2 - y - 1)));
-                            // console.log(Math.trunc(height * 2 - y));
-                            if (true === config.tracker.colors.includes(capture.colorAt(x, Math.trunc(height * 2 - y - 1)))) {
+                            // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(middleY));
+
+                            if (middle) {
                                 context.match(true);
 
-                                if (false === context.isEnter()) {
-                                    context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(height * 2 - y - 1));
+                                if (false === context.isEnter()) { return context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(middleY)); }
 
-                                    return true;
-                                }
+                                return false;
+                            }
+
+                            // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(bottomY));
+
+                            if (bottom) {
+                                context.match(true);
+
+                                if (false === context.isEnter()) { return context.enter(capture.converters.absolute.x(x), capture.converters.absolute.y(bottomY)); }
 
                                 return false;
                             }

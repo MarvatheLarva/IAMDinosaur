@@ -6,8 +6,8 @@ exports.Time = (layout, name, max, threshold, color = 'green') => {
     const state = { name, max, threshold, color, maxY: max }
 
     const line = contrib.line({
-        label: ` ${ state.name } - Frequency ${ converters.milliseconds(state.max).toFixed(2) } ms - Threshold ${ converters.milliseconds(state.threshold).toFixed(2) } ms `, 
-        height: 15,
+        label: ` ${ state.name } - Maximum ${ converters.milliseconds(state.max).toFixed(2) } ms - Threshold ${ converters.milliseconds(state.threshold).toFixed(2) } ms `, 
+        height: 8,
         width: layout.width - 2,
         top: 1,
         left: 1,

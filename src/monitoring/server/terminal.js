@@ -21,7 +21,7 @@ exports.Terminal = () => {
     return {
       addProbe: (probe) => {
         if (!Object.keys(state.probes).filter(name => name === probe.name).length) {
-          const layout = blessed.layout({ parent: state.screen, width: state.screen.width, height: 17, top: 17 * Object.keys(state.probes).length, border: { type: 'line', fg: 'red'}});
+          const layout = blessed.layout({ parent: state.screen, width: state.screen.width, height: 10, top: 10 * Object.keys(state.probes).length, border: { type: 'line', fg: 'red'}});
           state.probes[probe.name] = Time(layout, probe.name, probe.max, probe.threshold);
         }
         

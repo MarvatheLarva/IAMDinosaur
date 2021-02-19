@@ -1,9 +1,9 @@
 const Jimp = require('jimp');
 
-exports.saveCapture = async (capture, path) => {
+exports.saveCapture = async (capture, path, suffix) => {
     return new Promise((resolve, reject) => {
         try {
-            const filename = Date.now();
+            const filename = `${Date.now()} - ${suffix || '' }`;
             const pixelsShit = [];
             for (let y = 0; y < capture.height; y++) {
                 const captured = [];
