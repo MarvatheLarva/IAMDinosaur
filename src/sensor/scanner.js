@@ -52,6 +52,7 @@ exports.Scanner = (config) => {
             //     }
             // }
             saveCapture(capture, './', context.ident);
+            config.logger('-> Scanner done')
 
             width = data[0];
             height = data[1];

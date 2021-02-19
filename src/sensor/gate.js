@@ -40,7 +40,7 @@ exports.Gate = (config) => {
 
     const context = (() => {
         const state = {
-            activate: { on: null, off: null, matched: 0 },
+            activate: { on: null, off: null },
             position: { x: null, y: null },
             match: false,
             tolerance: 0
@@ -50,7 +50,7 @@ exports.Gate = (config) => {
             reset: () => {
                 const data = Object.assign({}, omit(state, ['match']))
 
-                state.activate =  { on: null, off: null, matched: 0 };
+                state.activate =  { on: null, off: null };
                 state.position =  { x: null, y: null };
                 state.match = false;
                 state.tolerance = 0;
@@ -65,19 +65,13 @@ exports.Gate = (config) => {
                 return true;
             },
             exit: () => {
-                if (state.activate.on && !state.match && state.tolerance >= TOLERANCE) {
-                    state.activate.off = Date.now();
+                if (state.activate.on && !state.match && state.tolerance >= TOLERANCE) { return !!(state.activate.off = Date.now()) }
 
-                    return true;
-                }
-
-                if (state.activate.on && !state.match) {
-                    state.tolerance++;
-                }
+                if (state.activate.on && !state.match) { state.tolerance++ }
 
                 return false;
             },
-            match: (match) => {state.match = match; !match ? null : state.activate.matched++ ;}
+            match: (match) => { state.match = match; }
         }
     })()
 
@@ -111,33 +105,19 @@ exports.Gate = (config) => {
                             const middleY = (height + y) + 1;
                             const bottomY = (2 * height + y) + 2;
 
-                            // const y = yCompressed;
-                            // const middleY = (height + y + 1);
-                            // const bottomY = (2 * height + y + 2);
-
-                            // console.log(y, middleY, bottomY);
-
-                            const topTracker = new Promise((res, rej) => {
+                            const topTracker = new Promise((res) => {
                                 return res(true === config.tracker.colors.includes(capture.colorAt(x, y)))
                             })
 
-                            const middleTracker = new Promise((res, rej) => {
+                            const middleTracker = new Promise((res) => {
                                 return res(true === config.tracker.colors.includes(capture.colorAt(x, middleY)))
                             })
 
-                            const bottomTracker = new Promise((res, rej) => {
-                                // console.log(config.size.height - y);
-                                // res(false);
+                            const bottomTracker = new Promise((res) => {
                                 return res(true === config.tracker.colors.includes(capture.colorAt(x, bottomY)))
                             })
 
                             const [top, bottom, middle] = await Promise.all([topTracker, bottomTracker, middleTracker])
-
-                            // const [ top ] = await Promise.all([topTracker])
-
-                            // const top = true === config.tracker.colors.includes(capture.colorAt(x, y));
-                            // const middle = true === config.tracker.colors.includes(capture.colorAt(x, middleY));
-                            // const bottom  = true === config.tracker.colors.includes(capture.colorAt(x, bottomY));
 
                             // robot.moveMouse(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
 

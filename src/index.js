@@ -2,6 +2,7 @@ const { Gate, Distance, Scanner } = require('./sensor');
 
 const udp = require('dgram');
 const readline = require('readline');
+const {PROBE_TYPES}=require('./monitoring/probe');
 
 const PROBE_SERVER_ADDRESS = '0.0.0.0';
 const PROBE_SERVER_PORT = 2222;
@@ -25,10 +26,15 @@ const client = ((client) => (data) => {
     const buffer = Buffer.from(JSON.stringify(data));
 
     client.send(buffer, PROBE_SERVER_PORT, PROBE_SERVER_ADDRESS)
-})(udp.createSocket('udp4'))
+})(udp.createSocket('udp4'));
+
+const logger = ((client) => (content, channel = 'main logs') => {
+    client({ type: PROBE_TYPES.log, name: channel, content })
+})(client);
 
 const commonConfig = {
     monitoring: { client },
+    logger,
     frequency: GLOBAL_FREQUENCY,
     threshold: GLOBAL_THRESHOLD,
     tracker: { colors: ['acacac', '535353'] },
@@ -75,7 +81,10 @@ const targetsScan = [];
 const targetsSpeed = [];
 
 gateA(async (stateGateA) => {
-    console.log('GATE A');
+    // console.log('GATE A');
+    
+    logger('-> activate GATE A');
+
     // console.log(stateGateA);
     statesGateA.push(stateGateA);
     targetsScan.push(await scanner({
@@ -86,11 +95,14 @@ gateA(async (stateGateA) => {
 })
 
 gateB(async (stateGateB) => {
-    console.log('GATE B');
+    // console.log('GATE B');
+
+    logger('-> activate GATE B');
+
     // console.log(stateGateB);
     const stateGateA = statesGateA.shift();
 
-    if (!stateGateA) { console.log('GATE A missing'); return;}
+    if (!stateGateA) { logger('{red-fg}-> error GATE A missing{/red-fg}'); return;}
     // console.log(stateGateB.activate.on - stateGateA.activate.on);
     targetsSpeed.push((GATE_A_X - GATE_B_X) / (stateGateB.activate.on - stateGateA.activate.on));
     
@@ -103,19 +115,20 @@ gateB(async (stateGateB) => {
     // statesGateB.push(stateGateB);
 })
 
-// let target = null;
+let target = null;
 
-// distanceMetter((compute) => {
-//     if (!target && (!targetsScan.length || !targetsSpeed.length)) return;
+distanceMetter((compute) => {
+    if (!target && (!targetsScan.length || !targetsSpeed.length)) return;
 
-//     if (!target) {
-//         target = Object.assign({}, targetsScan.shift(), { speed: targetsSpeed.shift() });
-//         console.log(target);
-//     }
+    if (!target) {
+        target = Object.assign({}, targetsScan.shift(), { speed: targetsSpeed.shift() });
+        logger(`-> Init Distance metter`);
+        logger(`{yellow-fg}${JSON.stringify(target)}{/yellow-fg}`);
+    }
 
-//     // const distance = compute(target);
+    // const distance = compute(target);
 
-//     // // generate full element payload
-//     // const element = Object.assign({}, target, { distance })
+    // // generate full element payload
+    // const element = Object.assign({}, target, { distance })
 
-// })
+})
