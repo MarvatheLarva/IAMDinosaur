@@ -12,5 +12,5 @@ exports.probe = async function (config, client, func) {
 
     const time = Number(end - start); // nano seconds
     
-    client(Object.assign({}, config, { measure: time }));
+    if (!config.mute) { client(Object.assign({}, config, { measure: time })) }
 }

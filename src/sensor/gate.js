@@ -5,7 +5,7 @@ const omit = require('lodash/omit');
 const { probe, PROBE_TYPES } = require('../monitoring/probe.js');
 const { converters } = require('../utils.js');
 
-robot.setMouseDelay(10)
+robot.setMouseDelay(0)
 
 // config: {
 //     identity: string,
@@ -28,10 +28,11 @@ robot.setMouseDelay(10)
 exports.Gate = (config) => {
     const emitter = new EventEmitter();
 
-    const TOLERANCE = 5;
+    const TOLERANCE = 10;
     const COMPRESSOR = 2;
 
     const probeConfig = {
+        mute: config.monitoring.mute,
         type: PROBE_TYPES.time,
         name: config.identity, 
         max: converters.nanoseconds(config.frequency),

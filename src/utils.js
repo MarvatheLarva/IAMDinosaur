@@ -1,4 +1,5 @@
 const Jimp = require('jimp');
+const robot = require('robotjs');
 
 exports.saveCapture = async (capture, path, suffix) => {
     return new Promise((resolve, reject) => {
@@ -51,4 +52,20 @@ exports.Context = (initContext) => {
 exports.converters = {
     nanoseconds: (milliseconds) => milliseconds * 1000000,
     milliseconds: (nanoseconds) => nanoseconds / 1000000
+}
+
+exports.Capture = (x, y, width, height) => {
+    const screenCapture = robot.screen.capture(x, y, width, height);
+    const converters = {
+        relative: { x: (absolute) => absolute - x, y: (absolute) => absolute - y },
+        absolute: { x: (relative) => x + relative, y: (relative) => y + relative }
+    }
+    const ratio = { x: screenCapture.width / width, y: screenCapture.height / height };
+
+    return {
+        screen: screenCapture,
+        colorAt: (x, y) => { return screenCapture.colorAt(x * ratio.x, y * ratio.y) },
+        ratio,
+        converters
+    }
 }

@@ -1,66 +1,115 @@
 const robot = require('robotjs');
 const { probe, PROBE_TYPES } = require('../monitoring/probe.js');
-const { converters, saveCapture } = require('../utils.js');
+const { converters, saveCapture, Capture } = require('../utils.js');
+
+robot.setMouseDelay(0);
 
 exports.Scanner = (config) => {
     const COMPRESSOR = 2;
 
     const probeConfig = {
+        mute: config.monitoring.mute,
         type: PROBE_TYPES.time,
         name: config.identity, 
         max: converters.nanoseconds(config.max),
         threshold: converters.nanoseconds(config.threshold)
     };
 
-    let count = 0;
-
     return async (context) => {
-        // console.log('SCAN', context)
-        let width = '?';
-        let height = '?';
-        let origin = '?';
+        const state = {
+            width: '?',
+            height: '?',
+            origin: '?'
+        }
 
         await probe(probeConfig, config.monitoring.client, async () => {
-            // await require('util').promisify(setTimeout)(4);
-            const capture = robot.screen.capture(config.position.x, config.position.y, config.size.width, config.size.height);
+            const capture = Capture(config.position.x, config.position.y, config.size.width, config.size.height);
 
-            const computeHeight = new Promise((res) => {
-                return res('x');
+            // USEFULL FOR HEIGHT
+            //   ▶ [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  , X, X,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  , X, X,  ,  , X, X]
+            //     [ ,  ,  ,  ,  ,  , X, X, X,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  , X, X,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  , X, X,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ] ◀
+            const computeHeight = new Promise(async (res, rej) => {
+                let [top, bottom] = [null, null];
+                for (let yTopCompressed = 0; yTopCompressed < (config.size.height) / COMPRESSOR; yTopCompressed++) {
+                    const yTop = yTopCompressed * COMPRESSOR;
+                    const yBottom = Math.max((config.size.height - 1) - yTop, 0);
+                    
+                    for (let xLeftCompressed = 0; xLeftCompressed < (config.size.width) / COMPRESSOR; xLeftCompressed++) {
+                        const xLeft = xLeftCompressed * COMPRESSOR;
+                        const xRight = Math.max((config.size.width  - 1) - xLeft, 0);
+                        
+                        if (null === top && config.tracker.colors.includes(capture.colorAt(xLeft, yTop))) {top = yTop}
+                        if (null === bottom && config.tracker.colors.includes(capture.colorAt(xRight, yBottom))) {bottom = yBottom}
+
+                        // robot.moveMouse(capture.converters.absolute.x(xLeft), capture.converters.absolute.y(yTop))
+                        // robot.moveMouse(capture.converters.absolute.x(xRight), capture.converters.absolute.y(yBottom))
+
+                        if (null !== top && null !== bottom) return res({height: bottom - top, groundDistance: config.size.height - bottom})
+                    }
+                }
+                console.log(top, bottom);
+                rej('ERROR');
             })
 
-            const computeWidth = new Promise((res) => {
-                return res('x');
-            })
+            // USEFULL FOR WIDTH
+            //      ▼ 
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  , X, X,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  , X, X,  ,  , X, X]
+            //     [ ,  ,  ,  ,  ,  , X, X, X,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  , X, X,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  , X, X,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //     [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
+            //                                    ▲
+            const computeWidth = new Promise((res, rej) => {
+                let left = null;
+                let right = null;
 
-            const computeOrigin = new Promise((res) => {
-                return res('x');
-            })
+                for (let xLeftCompressed = 0; xLeftCompressed < (config.size.width) / COMPRESSOR; xLeftCompressed++) {
+                    const xLeft = xLeftCompressed * COMPRESSOR;
+                    const xRight = Math.max((config.size.width  - 1) - xLeft, 0);
+        
+                    for (let yTopCompressed = 0; yTopCompressed < (config.size.height) / COMPRESSOR; yTopCompressed++) {
+                        const yTop = yTopCompressed * COMPRESSOR;
+                        const yBottom = Math.max((config.size.height - 1) - yTop, 0);
 
-            const data = await Promise.all([computeHeight, computeWidth, computeOrigin])
+                        // console.log(yTop, yBottom, xLeft, xRight);
 
-            // for (let y = config.size.width / COMPRESSOR; y >= 0; y--) {
-            //     let count = 0;
-            //     for (let x = config.size.height / COMPRESSOR; x >= 0; x--) {
-            //         if (count > config.size.height / COMPRESSOR / 2) { break };
-            //         // console.log('no escape');
-            //         const color = capture.colorAt(x * COMPRESSOR, y * COMPRESSOR)
-            //         if (config.tracker.colors.includes(color)) {
-            //             count = 0;
-            //         } else {
-            //             count++;
-            //         }
-            //     }
-            // }
-            saveCapture(capture, './', context.ident);
+                        if (null === left && config.tracker.colors.includes(capture.colorAt(xLeft, yTop))) {left = xLeft}
+                        if (null === right && config.tracker.colors.includes(capture.colorAt(xRight, yBottom))) {right = xRight}
+
+                        // robot.moveMouse(capture.converters.absolute.x(xLeft), capture.converters.absolute.y(yTop))
+                        // robot.moveMouse(capture.converters.absolute.x(xRight), capture.converters.absolute.y(yBottom))
+
+                        if (null !== left && null !== right) return res(right - left)
+                    }
+                }
+                console.log(left, right);
+                rej('ERROR');
+            });
+
+            // saveCapture(capture.screen, './', context.ident);
+
+            const [computedHeight, computedWidth] = await Promise.all([computeHeight, computeWidth])
+
             config.logger('-> Scanner done')
 
-            width = data[0];
-            height = data[1];
-            origin = data[2];
+            state.height = computedHeight.height;
+            state.origin = computedHeight.groundDistance;
+            state.width = computedWidth;
         });
 
-        return  {
-            width, height, origin
-        }
+        return Object.assign({}, state);
     }
 }
