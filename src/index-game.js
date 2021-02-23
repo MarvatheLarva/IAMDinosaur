@@ -1,9 +1,10 @@
-const { Gate, Distance, Scanner } = require('./sensor');
+const { Gate, Distance, Scanner } = require('./client/sensor');
+const synaptic = require('synaptic');
 
 const udp = require('dgram');
 const readline = require('readline');
 
-const { PROBE_TYPES } = require('./monitoring/probe');
+const { PROBE_TYPES } = require('./server/monitoring/probe');
 
 const PROBE_SERVER_ADDRESS = '0.0.0.0';
 const PROBE_SERVER_PORT = 2222;
@@ -87,49 +88,51 @@ const statesGateA = [];
 const targetsScan = [];
 const targetsSpeed = [];
 
-gateA(async (stateGateA) => {   
-    logger('-> activate GATE A');
-
-    statesGateA.push(stateGateA);
-    scanner({
-        ident: 'gate A',
-        // config
-    }).then(scan => targetsScan.push(scan))
-})
-
-gateB(async (stateGateB) => {
-    logger('-> activate GATE B');
-
-    const stateGateA = statesGateA.shift();
-
-    if (!stateGateA) { logger('{red-fg}-> error GATE A missing{/red-fg}'); return;}
-
-    targetsSpeed.push((GATE_A_X - GATE_B_X) / (stateGateB.activate.on - stateGateA.activate.on));
-})
-
 let target = null;
 let passthrough = false;
 
-distanceMetter((compute) => {
-    if (!target && (!targetsScan.length || !targetsSpeed.length)) return;
+const processes = [
+    gateA(async (stateGateA) => {   
+        logger('-> activate GATE A');
     
-    if (!target) {
-        target = Object.assign({}, targetsScan.shift(), { speed: targetsSpeed.shift() });
-        logger(`-> Init Distance metter`);
-        logger(`{yellow-fg}${JSON.stringify(target, null, 0)}{/yellow-fg}`);
-    }
+        statesGateA.push(stateGateA);
+        targetsScan.push(scanner({
+            ident: 'gate A',
+            // config
+        }));
+    }),
+    gateB(async (stateGateB) => {
+        logger('-> activate GATE B');
+    
+        const stateGateA = statesGateA.shift();
+    
+        if (!stateGateA) { logger('{red-fg}-> error GATE A missing{/red-fg}'); return;}
+    
+        targetsSpeed.push((GATE_A_X - GATE_B_X) / (stateGateB.activate.on - stateGateA.activate.on));
+    }),
+    distanceMetter((compute) => {
+        if (!target && (!targetsScan.length || !targetsSpeed.length)) return;
+        
+        if (!target) {
+            target = Object.assign({}, targetsScan.shift(), { speed: targetsSpeed.shift() });
+            logger(`-> Init Distance metter`);
+            logger(`{yellow-fg}${JSON.stringify(target, null, 0)}{/yellow-fg}`);
+        }
+        
+        const distance = compute(target);
+        // handleDecision(Object.assign({}, target, { distance }))
+    
+        if (!passthrough && 0 === distance) passthrough = true;
+    
+        if (passthrough && distance > 0) {
+            passthrough = false;
+            target = null;
+        }
+    
+        // console.log(network.toJSON());
+    
+        // // generate full element payload
+        // const element = Object.assign({}, target, { distance })
+    })
+];
 
-    const distance = compute(target);
-    logger(`-> distance : ${distance}`)
-
-    if (!passthrough && 0 === distance) passthrough = true;
-
-    if (passthrough && distance > 0) {
-        passthrough = false;
-        target = null;
-    }
-
-    // // generate full element payload
-    // const element = Object.assign({}, target, { distance })
-
-})

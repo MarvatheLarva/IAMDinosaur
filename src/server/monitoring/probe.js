@@ -1,6 +1,7 @@
 exports.PROBE_TYPES = {
   time: 'time',
-  log: 'log'
+  stopwatch: 'stopwatch',
+  log: 'logger'
 }
 
 exports.probe = async function (config, client, func) {

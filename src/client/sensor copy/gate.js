@@ -2,8 +2,8 @@ const { EventEmitter } = require('events');
 const robot = require('robotjs');
 const omit = require('lodash/omit');
 
-const { probe, PROBE_TYPES } = require('../monitoring/probe.js');
-const { converters } = require('../utils.js');
+const { probe, PROBE_TYPES } = require('../../server/monitoring/probe.js');
+const { converters } = require('../../utils.js');
 
 robot.setMouseDelay(0)
 

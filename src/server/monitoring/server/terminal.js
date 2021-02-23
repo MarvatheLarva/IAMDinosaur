@@ -25,13 +25,13 @@ exports.Terminal = () => {
     return {
       addProbe: (probe) => {
         if (!Object.keys(state.probes).filter(name => name === probe.name).length) {
-          const layout = blessed.layout({ parent: state.screen, width: state.screen.width, height: 10, top: 10 * Object.keys(state.probes).length, border: { type: 'line', fg: 'white'}});
+          const layout = blessed.layout({ parent: state.screen, width: state.screen.width, height: 20, top: 10 * Object.keys(state.probes).length, border: { type: 'line', fg: 'white'}});
 
           if (probe.type === PROBE_TYPES.time) { state.probes[probe.name] = Time(layout, probe.name, probe.max, probe.threshold) }
           if (probe.type === PROBE_TYPES.log) { state.probes[probe.name] = Log(layout, probe.name) }
         }
         
-        if (probe.type === PROBE_TYPES.time) { state.probes[probe.name](probe.measure) }
+        if (probe.type === PROBE_TYPES.stopwatch) { state.probes[probe.name](probe.measure) }
         if (probe.type === PROBE_TYPES.log) { state.probes[probe.name](probe.content) }
         
         render();

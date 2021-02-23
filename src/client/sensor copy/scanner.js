@@ -1,6 +1,6 @@
 const robot = require('robotjs');
-const { probe, PROBE_TYPES } = require('../monitoring/probe.js');
-const { converters, saveCapture, Capture } = require('../utils.js');
+const { probe, PROBE_TYPES } = require('../../server/monitoring/probe.js');
+const { converters, saveCapture, Capture } = require('../../utils.js');
 
 robot.setMouseDelay(0);
 
@@ -83,8 +83,6 @@ exports.Scanner = (config) => {
                     for (let yTopCompressed = 0; yTopCompressed < (config.size.height) / COMPRESSOR; yTopCompressed++) {
                         const yTop = yTopCompressed * COMPRESSOR;
                         const yBottom = Math.max((config.size.height - 1) - yTop, 0);
-
-                        // console.log(yTop, yBottom, xLeft, xRight);
 
                         if (null === left && config.tracker.colors.includes(capture.colorAt(xLeft, yTop))) {left = xLeft}
                         if (null === right && config.tracker.colors.includes(capture.colorAt(xRight, yBottom))) {right = xRight}

@@ -1,6 +1,6 @@
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
-const { converters } = require('../../../utils');
+const { converters } = require('../../../../utils');
 
 exports.Log = (layout, name) => {
     const state = { name }
@@ -12,7 +12,7 @@ exports.Log = (layout, name) => {
         // alwaysScroll:true,
         scrollable: true,
         tags: true,
-        label: name, width: layout.width - 2,height: 8, fg: "green", selectedFg: "green", border: {type: "line", fg: "cyan"}});
+        label: name, width: layout.width - 2,height: 18, fg: "green", selectedFg: "green", border: {type: "line", fg: "cyan"}});
 
     layout.append(logger);
 

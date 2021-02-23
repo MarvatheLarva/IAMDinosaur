@@ -1,6 +1,6 @@
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
-const { converters } = require('../../../utils');
+const { converters } = require('../../../../utils');
 
 exports.Time = (layout, name, max, threshold, color = 'green') => {
     const state = { name, max, threshold, color, maxY: max }
