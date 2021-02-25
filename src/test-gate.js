@@ -12,16 +12,30 @@ const MONITORING_SERVER_PORT = 2222;
 const TRACKING_COLORS = ['acacac', '535353'];
 
 const GATE_FREQUENCY = 10; // ms
-const GATE_COMPRESSOR = 1;
+const GATE_COMPRESSOR = 2;
 
 const GATE_SIZE = { width: 10, height: 110 };
 const GATE_POSITION = { x: 480, y: 164 };
 
 const DISTANCE_FREQUENCY = 10; // ms
-const DISTANCE_COMPRESSOR = 1;
+const DISTANCE_COMPRESSOR = 2;
+const DISTANCE_TIMEOUT = 15000;
 
 const DISTANCE_POSITION = { x: 90, y: 278 };
 const DISTANCE_SIZE = { width: 270, height: 1 };
+
+const MACHINE_MIN_WIDTH = 0;
+const MACHINE_MIN_HEIGHT = 0;
+const MACHINE_MIN_DISTANCE = 0;
+const MACHINE_MIN_SPEED = 0;
+
+const MACHINE_MAX_WIDTH = 50;
+const MACHINE_MAX_HEIGHT = 50;
+const MACHINE_MAX_DISTANCE = DISTANCE_SIZE.width;
+const MACHINE_MAX_SPEED = 0.5;
+const DISTANCE_MAX_ORIGIN = DISTANCE_SIZE.height;
+const DISTANCE_MAX_DURATION = 1000;
+
 // ######################        /Globals          ######################
 
 // ######################        Utils          ######################
@@ -117,8 +131,8 @@ const Monitoring = (address, port) => {
 
 // Sensors
 const Gate = (config, monitoring) => {
-    const emitter = new EventEmitter();
     const context = {
+        emitter: new EventEmitter(),
         interval: null,
         state: {
             match: false,
@@ -151,13 +165,15 @@ const Gate = (config, monitoring) => {
         const x = config.position.x - 100;
         const y = config.position.y + config.size.height - origin - (height / 2);
         const capture = Capture(x, y, 100, 1);
+
+        context.emitter.emit('capture_terminate', capture);
         
-        let tolerance = 5;
+        let tolerance = 20;
         let width = 0;
-        for (let i = 99; i >= 0; i--) {
+        for (let i = 99 / config.compressor; i >= 0; i--) {
             if (tolerance === 0) break;
             
-            if(config.tracker.colors.includes(capture.colorAt(i, 0))) {
+            if(config.tracker.colors.includes(capture.colorAt(i * config.compressor, 0))) {
                 width++;
             } else if (width > 0) {
                 tolerance--;
@@ -175,14 +191,14 @@ const Gate = (config, monitoring) => {
             context.state.match = true;
             context.state.activate.on = Date.now();
             
-            emitter.emit('initialize');
+            context.emitter.emit('initialize');
         }
     }
     
     function terminate() {
         context.state.activate.off = Date.now();
         
-        emitter.emit('terminate', computeState());
+        context.emitter.emit('terminate', computeState());
         clearContext();
     }
     const self = () => Object.assign({}, {
@@ -217,7 +233,7 @@ const Gate = (config, monitoring) => {
                     }
                 }
 
-                if (localMatch) emitter.emit('capture', capture);
+                if (localMatch) context.emitter.emit('capture_match', capture);
                 
                 if (context.state.match && !localMatch) { terminate() }
             })
@@ -238,7 +254,7 @@ const Gate = (config, monitoring) => {
     function _on(e, func) {
         monitoring.logger(`[GATE] -> register on(${e})`);
 
-        emitter.on(e, func);
+        context.emitter.on(e, func);
         
         return self();
     }
@@ -247,9 +263,10 @@ const Gate = (config, monitoring) => {
 };
 
 const Distance = (config, monitoring) => {
-    const emitter = new EventEmitter();
     const context = {
+        emitter: new EventEmitter(),
         interval: null,
+        timeout: null,
         state: {
             targets: null,
             current: null,
@@ -260,6 +277,7 @@ const Distance = (config, monitoring) => {
 
     function clearContext() {
         context.interval = null;
+        context.timeout = null;
         context.state.targets = null;
         context.state.current = null;
         context.state.distance = null;
@@ -280,6 +298,13 @@ const Distance = (config, monitoring) => {
         return config.size.width;
     }
 
+    function initTimeout() {
+        clearTimeout(context.timeout);
+        context.timeout = setTimeout(() => {
+            context.emitter.emit('timeout');
+        }, config.timeout);
+    }
+
     const self = () => Object.assign({}, {
         'start': _start,
         'stop': _stop,
@@ -296,12 +321,14 @@ const Distance = (config, monitoring) => {
                 
                 if (!context.state.current) {
                     context.state.current = context.state.targets.shift();
-                    emitter.emit('initialize', context.state.current);
+                    context.emitter.emit('initialize', context.state.current);
+
+                    initTimeout();
                 }
 
                 const capture = Capture(config.position.x, config.position.y - (context.state.current.height / 2 + context.state.current.origin), config.size.width, 1);
 
-                emitter.emit('capture', capture);
+                context.emitter.emit('capture', capture);
 
                 context.state.distance = parseCapture(capture);
 
@@ -311,9 +338,9 @@ const Distance = (config, monitoring) => {
                     context.state.passthrough = false;
                     context.state.current = null;
                     
-                    emitter.emit('scored');
+                    context.emitter.emit('scored');
                 } else if (!context.state.passthrough && context.state.distance > 10) {
-                    emitter.emit('distance', context.state.current, context.state.distance);
+                    context.emitter.emit('distance', context.state.distance);
                 }
             });
         }, config.frequency);
@@ -324,6 +351,7 @@ const Distance = (config, monitoring) => {
     function _stop() {
         monitoring.logger(`[DISTANCE] -> stop`);
 
+        clearTimeout(context.timeout);
         clearInterval(context.interval);
         clearContext();
 
@@ -332,7 +360,7 @@ const Distance = (config, monitoring) => {
 
     function _on(e, func) {
         monitoring.logger(`[DISTANCE] -> register on(${e})`);
-        emitter.on(e, func);
+        context.emitter.on(e, func);
 
         return self();
     }
@@ -343,8 +371,8 @@ const Distance = (config, monitoring) => {
 // Terminal
 const readline = require('readline');
 const Terminal = (config, monitoring) => {
-    const emitter = new EventEmitter();
     const context = {
+        emitter: new EventEmitter(),
         state: null
     };
 
@@ -352,31 +380,36 @@ const Terminal = (config, monitoring) => {
         context.state = null;
     }
 
-    const self = () => Object.assign({}, {
-        'start': _start,
-        'stop': _stop,
-        'on': _on
-    });
-
-    function _start(func) {
+    function displayHelp() {
         console.log(JSON.stringify({
             'Press s': 'Start learning',
             'Press r': 're-Start learning',
             'Press p': 'Start game with best known genome',
             'Press q': 'Stop game', 
         }, null, 2));
+    }
 
+    const self = () => Object.assign({}, {
+        'start': _start,
+        'stop': _stop,
+        'on': _on,
+        'emit': _emit
+    });
+
+    function _start(func) {
         monitoring.logger('[TERMINAL] -> start');
+        displayHelp();
 
         readline.emitKeypressEvents(process.stdin);
         process.stdin.setRawMode(true);
 
-        context.state = func();
-        
+        context.state = func(self());
+
         process.stdin.on('keypress', ((args) => (str, key) => { 
-            if (key.name === 'q') emitter.emit('stop', ...args, self())
-            if (key.name === 's') emitter.emit('start', ...args, self())
-            if (key.name === 'r') emitter.emit('reload', ...args, self())
+            if (str === '?' || key.name === 'h') displayHelp()
+            if (key.name === 'q') context.emitter.emit('stop', ...args, self())
+            if (key.name === 's') context.emitter.emit('start', ...args, self())
+            if (key.name === 'r') context.emitter.emit('reload', ...args, self())
         })(context.state))
     }
 
@@ -388,7 +421,14 @@ const Terminal = (config, monitoring) => {
 
     function _on(e, func) {
         monitoring.logger(`[TERMINAL] -> register on(${e})`);
-        emitter.on(e, func);
+        context.emitter.on(e, func);
+
+        return self();
+    }
+
+    function _emit(e, ...data) {
+        monitoring.logger(`[TERMINAL] -> emit on(${e})`);
+        context.emitter.emit(e, ...data);
 
         return self();
     }
@@ -398,12 +438,73 @@ const Terminal = (config, monitoring) => {
 
 // Machine
 const Machine = (config, monitoring) => {
-    const emitter = new EventEmitter();
-    const context = {};
+    const context = {
+        state: {
+            score: 0,
+            inputs: {
+                width: null,
+                height: null,
+                speed: null,
+                origin: null,
+                distance: null
+            }
+        }
+    };
+
+    function clearContext() {
+        context.state.score = 0;
+        context.state.inputs = {
+            width: null,
+            height: null,
+            speed: null,
+            origin: null,
+            distance: null
+        };
+    }
+
+    function computeInputs(rawInputs) {
+        Object.keys(rawInputs).map(k => {
+            context.state.inputs[k] = rawInputs[k] / config.inputs.max[k];
+        })
+    }
 
     const self = () => Object.assign({}, {
+        'start': _start,
+        'stop': _stop,
+        'initialize': _initialize,
+        'play': _play,
+        'score': _score
     });
 
+    function _start() {
+        monitoring.logger(`[MACHINE] -> start`);
+    }
+
+    function _stop() {
+        monitoring.logger(`[MACHINE] -> stop`);
+        clearContext();
+    }
+
+    function _initialize(rawInputs) {
+        monitoring.logger(`[MACHINE] -> initialize`);
+
+        computeInputs(rawInputs);
+
+        monitoring.logger(`[MACHINE] -> inputs ${JSON.stringify(context.state.inputs)}`);
+    }
+    
+    function _play(rawInputs) {
+        computeInputs(rawInputs);
+        
+        // activate network
+        // const output = network.activate(Object.values(context.state.inputs));
+        // monitoring.play(output);
+    }
+
+    function _score() {
+        monitoring.logger(`[MACHINE] -> score`);
+    }
+    
 
     return self();
 }
@@ -417,13 +518,15 @@ const configMonitoring = {
     gate: { stopwatch: { max: converters.nanoseconds(GATE_FREQUENCY), threshold: converters.nanoseconds(GATE_FREQUENCY * 0.7) } },
     distance: { stopwatch: { max: converters.nanoseconds(DISTANCE_FREQUENCY), threshold: converters.nanoseconds(DISTANCE_FREQUENCY * 0.7) } },
     terminal: {},
+    machine: {}
 }
 
 // Config
 const config = {
     gate: { frequency: GATE_FREQUENCY, compressor: GATE_COMPRESSOR, position: GATE_POSITION, size: GATE_SIZE, tracker: { colors: TRACKING_COLORS }, monitoring: configMonitoring.gate },
-    distance: { frequency: DISTANCE_FREQUENCY, compressor: DISTANCE_COMPRESSOR, position: DISTANCE_POSITION, size: DISTANCE_SIZE, tracker: { colors: TRACKING_COLORS }, monitoring: configMonitoring.distance },
+    distance: { frequency: DISTANCE_FREQUENCY, compressor: DISTANCE_COMPRESSOR, timeout: DISTANCE_TIMEOUT, position: DISTANCE_POSITION, size: DISTANCE_SIZE, tracker: { colors: TRACKING_COLORS }, monitoring: configMonitoring.distance },
     terminal: { monitoring: configMonitoring.terminal },
+    machine: { inputs: { min: { width: MACHINE_MIN_WIDTH, height: MACHINE_MIN_HEIGHT, distance: MACHINE_MIN_DISTANCE, speed: MACHINE_MIN_SPEED }, max: { width: MACHINE_MAX_WIDTH, height: MACHINE_MAX_HEIGHT, origin: DISTANCE_MAX_ORIGIN, duration: DISTANCE_MAX_DURATION, distance: MACHINE_MAX_DISTANCE, speed: MACHINE_MAX_SPEED } }, monitoring: configMonitoring.machine }
 }
 
 // ######################        /Config          ######################
@@ -451,32 +554,34 @@ async function saveCaptures() {
 }
 
 Terminal(config.terminal, monitoring)
-    .on('start', (gate, distance, terminal) => {
+    .on('start', (gate, distance, machine, terminal) => {
         monitoring.logger('##### GAME START #####');
         console.log('start...')
 
         gate.start();
         distance.start(targets);
+        machine.start();
     })
-    .on('stop', async (gate, distance, terminal) => {
+    .on('stop', async (gate, distance, machine, terminal) => {
         monitoring.logger('##### GAME STOP #####');
         console.log('quit...')
 
         gate.stop();
         distance.stop();
-        terminal.stop();
+        machine.stop();
 
         await saveCaptures();
 
         await sleep(2000);
         process.exit();
     })
-    .on('reload', async (gate, distance, terminal) => {
+    .on('reload', async (gate, distance, machine, terminal) => {
         monitoring.logger('##### GAME RELOAD #####');
         console.log('reload...')
 
         gate.stop();
         distance.stop();
+        machine.stop();
 
         await sleep(1000);
         
@@ -484,24 +589,40 @@ Terminal(config.terminal, monitoring)
 
         gate.start();
         distance.start(targets);
+        machine.start();
     })
-    .start(() => {
+    .start((terminal) => {
         const gate = Gate(config.gate, monitoring);
         const distance = Distance(config.distance, monitoring);
+        const machine = Machine(config.machine, monitoring);
 
         return [
             gate
-                // .on('capture', (capture) => capturesGate.push(capture))
+                .on('capture_match', (capture) => capturesGate.push(capture))
+                .on('capture_terminate', (capture) => capturesGate.push(capture))
                 .on('initialize', () => monitoring.logger('Gate -> initialize'))
                 .on('terminate', (target) => targets.push(target) && monitoring.logger('Gate -> terminate')),
+
             distance
-                // .on('capture', (capture) => capturesDistance.push(capture))
+                .on('capture', (capture) => capturesDistance.push(capture))
                 .on('initialize', (target) => {
                     monitoring.logger('Distance -> initialize');
                     monitoring.logger(JSON.stringify(target))
+                    machine.initialize(target);
                 })
-                // .on('distance', (target, distance) => monitoring.logger('Distance -> ' + distance))
-                .on('scored', () => monitoring.logger('Distance -> ~scored'))
+                .on('distance', (distance) => {
+                    // monitoring.distance('Distance -> ' + distance);
+                    machine.play({ distance });
+                })
+                .on('scored', () => {
+                    monitoring.logger('Distance -> ~scored');
+                    machine.score();
+                })
+                .on('timeout', () => {
+                    monitoring.logger('Distance -> timeout');
+                    terminal.emit('reload', gate, distance, machine, terminal);
+                }),
+            machine
         ]
     })
 // ######################        /Execution          ######################
