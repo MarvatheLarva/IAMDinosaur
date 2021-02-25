@@ -11,6 +11,11 @@ exports.Machine = (path, monitoring) => {
 
     const context = {
         current: null,
+        keyToggle: null,
+        state: {
+            key: null,
+            start: false
+        }
     }
 
     if(!fs.existsSync(GENOMES)) {
@@ -79,24 +84,38 @@ exports.Machine = (path, monitoring) => {
 
     const self = () => {
         return {
-            genome: (inputs) => { 
+            genome: (inputs) => {
+                if (!context.state.start) return;
+                
                 const output = context.current.activate([inputs.width, inputs.height, inputs.origin, inputs.speed, inputs.distance]);
                 // console.log(inputs, output);
                 if (output > 0.55) {
                     // console.log('up');
-                    robot.keyTap('up')
+                    clearTimeout(context.keyToggle);
+                    robot.keyToggle('down', 'up');
+                    robot.keyTap('up');
+                    monitoring.logger('-> genome exec JUMP ' + JSON.stringify(inputs));
                 }
                 if (output < 0.45) {
-                    // console.log('down');
-                    robot.keyTap('down')
+                    clearTimeout(context.keyToggle);
+                    context.keyToggle = setTimeout(() => {
+                        robot.keyToggle('down', 'up');
+                        context.state.key = null;
+                    }, 50);
+                    if (context.state.key !== 'down') {
+                        robot.keyToggle('down', 'down');
+                    }
+                    monitoring.logger('-> genome exec CROUCH ' + JSON.stringify(inputs));
                 }
+
             },
             compute: (score) => {
-                console.log(score);
+                // console.log(score);
                 fs.writeFileSync(`${GENOMES_PROCEED}/${'00000'.slice(0, Math.trunc(5 - score / 10) + 1)}${score}-${Date.now()}.genome`, JSON.stringify(context.current.toJSON()));
                 fs.unlinkSync(`${GENOMES}/${fs.readdirSync(GENOMES).shift()}`);
 
                 if (fs.readdirSync(GENOMES).length === 0) {
+                    monitoring.logger('GENERATION END / CROSS OVER / MUTATE');
                     console.log('GENERATION END / CROSS OVER / MUTATE');
                     // get TWO BESTs genomes
                     const [genA, genB] = fs.readdirSync(GENOMES_PROCEED).reverse().slice(0, 2).map(e => JSON.parse(fs.readFileSync(`${GENOMES_PROCEED}/${e}`)));
@@ -113,7 +132,15 @@ exports.Machine = (path, monitoring) => {
                     context.current = Network.fromJSON(JSON.parse(fs.readFileSync(`${GENOMES}/${fs.readdirSync(GENOMES)[0]}`)));
                 }
             },
-            stop: () => {}
+            start: () => {
+                context.state.start = true;
+            },
+            stop: () => {
+                context.state.start = false; 
+                context.state.key = null;
+                robot.keyToggle('down', 'up');
+                robot.keyToggle('up', 'up');
+             }
         }
     }
 

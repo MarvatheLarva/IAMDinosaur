@@ -1,7 +1,7 @@
 const Jimp = require('jimp');
 const robot = require('robotjs');
 
-module.exports.saveCapture = async (capture, path, suffix) => {
+exports.saveCapture = async (capture, path, suffix) => {
     return new Promise((resolve, reject) => {
         try {
             const filename = `${Date.now()} - ${suffix || '' }`;
@@ -21,7 +21,7 @@ module.exports.saveCapture = async (capture, path, suffix) => {
     });
 }
 
-module.exports.measure = async (callback, description, log, threshold) => {
+exports.measure = async (callback, description, log, threshold) => {
     const hrstart = process.hrtime();
     
     await callback();
@@ -36,9 +36,9 @@ module.exports.measure = async (callback, description, log, threshold) => {
     require('fs').writeFile(`./debug-${description}.log`, `time ${hrend[0]}s ${Math.trunc(hrend[1] / 1000000)}ms`, () => {})
 }
 
-module.exports.sleep = require('util').promisify(setTimeout);
+exports.sleep = require('util').promisify(setTimeout);
 
-module.exports.Context = (initContext) => {
+exports.Context = (initContext) => {
     let context = Object.assign({}, initContext);
 
     return {
@@ -49,12 +49,12 @@ module.exports.Context = (initContext) => {
     }
 }
 
-module.exports.converters = {
+exports.converters = {
     nanoseconds: (milliseconds) => milliseconds * 1000000,
     milliseconds: (nanoseconds) => nanoseconds / 1000000
 }
 
-module.exports.Capture = (x, y, width, height) => {
+exports.Capture = (x, y, width, height) => {
     const screenCapture = robot.screen.capture(x, y, width, height);
     const converters = {
         relative: { x: (absolute) => absolute - x, y: (absolute) => absolute - y },

@@ -1,7 +1,9 @@
 const EventEmitter = require('events');
 const robot = require('robotjs');
 
-const { Gate, Distance, Scanner, Status } = require('./sensor');
+const { Gate, Distance } = require('./sensor');
+
+robot.setKeyboardDelay(0);
 
 exports.Game = (sensor, monitoring) => {
     const emitter = new EventEmitter();
@@ -28,40 +30,63 @@ exports.Game = (sensor, monitoring) => {
         context.buffer.speed = [];
     }
 
+    const gateA = Gate(sensor.gate.a, monitoring)
+        .on('activation', async (state) => {   
+            monitoring.logger('-> activate GATE A');
+            context.buffer.gate.push(state);
+
+            clearTimeout(context.timeout.gameover);
+            context.timeout.gameover = setTimeout(() => {
+                console.log('GAME OVER');
+                monitoring.logger('GAME OVER');
+                emitter.emit('gameover', context.score);
+            }, 2000);
+        })
+        .on('scanner', (scan) => {
+            context.buffer.scan.push(scan);
+        });
+
+    const gateB = Gate(sensor.gate.b, monitoring)
+        .on('activation', async (exitState) => {
+            monitoring.logger('-> activate GATE B');
+        
+            const initState = context.buffer.gate.shift();
+        
+            clearTimeout(context.timeout.gameover);
+            context.timeout.gameover = setTimeout(() => {
+                // console.log('GAME OVER');
+                monitoring.logger('GAME OVER');
+                emitter.emit('gameover', context.score);
+            }, 2000);
+
+            if (!initState) {
+                // console.log('-> error initial state GATE A missing');
+                monitoring.logger('{red-fg}-> error initial state GATE A missing{/red-fg}');
+                // console.log(exitState);
+                // @todo use exitState.position to create fake width, height based on static data
+                return;
+            }
+        
+            context.buffer.speed.push((sensor.gate.a.position.x - sensor.gate.b.position.x) / (exitState.activate.in - initState.activate.in));
+
+        });
+    
+    const distance = Distance(sensor.distance, monitoring);
+
     const self = () => Object.assign({},{
-        start: (genome) => {
+        start: async (genome) => {
+            // click 
+            robot.keyTap('up');
+            await require('util').promisify(setTimeout)(1000);
+            robot.keyTap('up');
+
             resetContext();
 
-            const scanner = Scanner(sensor.scanner, monitoring);
+            context.interval.gate.a = gateA.start();
 
-            context.interval.gate.a = Gate(sensor.gate.a, monitoring)
-                .on('activation', async (state) => {   
-                    monitoring.logger('-> activate GATE A');
-                    
-                    context.buffer.scan.push(await scanner());
-                    context.buffer.gate.push(state);
+            context.interval.gate.b = gateB.start();
 
-                    clearTimeout(context.timeout.gameover);
-                    context.timeout.gameover = setTimeout(() => {
-                        console.log('GAME OVER');
-                        emitter.emit('gameover', context.score);
-                    }, 2000);
-                })
-                .start();
-
-            context.interval.gate.b = Gate(sensor.gate.b, monitoring)
-                .on('activation', async (exitState) => {
-                    monitoring.logger('-> activate GATE B');
-                
-                    const initState = context.buffer.gate.shift();
-                
-                    if (!initState) { monitoring.logger('{red-fg}-> error initial state GATE A missing{/red-fg}'); return;}
-                
-                    context.buffer.speed.push((sensor.gate.a.position.x - sensor.gate.b.position.x) / (exitState.activate.on - initState.activate.on));
-                })
-                .start();
-
-            context.interval.distance = Distance(sensor.distance, monitoring)((compute) => {
+            context.interval.distance = distance((compute) => {
                 if (!context.current && (!context.buffer.scan.length || !context.buffer.speed.length)) return;
                 
                 if (!context.current) {
@@ -88,23 +113,23 @@ exports.Game = (sensor, monitoring) => {
                 }
             });
 
-            // click 
-            robot.keyTap('up')
+            monitoring.logger('GAME START');
 
             return self();
         },
         stop: () => {
-            clearInterval(context.interval.status);
-            context.interval.status = null;
 
             clearInterval(context.interval.distance);
             context.interval.distance = null;
 
-            clearInterval(context.interval.gate.a);
-            context.interval.gate.a = null;
+            clearTimeout(context.timeout.gameover);
+            context.timeout.gameover = null;
 
-            clearInterval(context.interval.gate.b);
-            context.interval.gate.b = null;
+            gateA.stop();
+
+            gateB.stop();
+
+            monitoring.logger('GAME STOP');
 
             return self();
         },

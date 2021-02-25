@@ -11,15 +11,18 @@ const { Monitoring } = require('./monitoring');
     
     const TRACKING_COLORS = ['acacac', '535353'];
     
-    const GLOBAL_MUTE = true;
-    const GLOBAL_COMPRESSOR = 2;
+    const GLOBAL_MUTE = false;
+    const GLOBAL_COMPRESSOR = 3;
     const GLOBAL_FREQUENCY = 3; // millisecondds
     const GLOBAL_THRESHOLD = GLOBAL_FREQUENCY * 0.7; // Threshold at 70% of frequency
+
+    const DISTANCE_FREQUENCY = 10;
+    const DISTANCE_THRESHOLD = DISTANCE_FREQUENCY * 0.7;
 
     const GATE_A_X = 480;
     const GATE_A_Y = 194;
 
-    const GATE_B_X = 300;
+    const GATE_B_X = 280;
     const GATE_B_Y = 194;
 
     const GATE_TOLERANCE = 10;
@@ -27,7 +30,7 @@ const { Monitoring } = require('./monitoring');
     const GATE_WIDTH = 1;
     const GATE_HEIGHT = 81;
 
-    const SCANNER_X = GATE_A_X - 80;
+    const SCANNER_X = GATE_A_X - 85;
     const SCANNER_Y = GATE_A_Y - 35;
 
     const SCANNER_WIDTH = 80;
@@ -64,17 +67,17 @@ const { Monitoring } = require('./monitoring');
 
         const statusMonitoring = Object.assign({}, commonMonitoring, { stopwatch: { max: converters.nanoseconds(1000), threshold: converters.nanoseconds(900), mute: GLOBAL_MUTE } });
         const gateMonitoring = Object.assign({}, commonMonitoring, { stopwatch: { max: converters.nanoseconds(GLOBAL_FREQUENCY), threshold: converters.nanoseconds(GLOBAL_THRESHOLD), mute: GLOBAL_MUTE } });
-        const distanceMonitoring = Object.assign({}, commonMonitoring, { stopwatch: { max: converters.nanoseconds(GLOBAL_FREQUENCY), threshold: converters.nanoseconds(GLOBAL_THRESHOLD), mute: GLOBAL_MUTE } });
+        const distanceMonitoring = Object.assign({}, commonMonitoring, { stopwatch: { max: converters.nanoseconds(DISTANCE_FREQUENCY), threshold: converters.nanoseconds(DISTANCE_THRESHOLD), mute: GLOBAL_MUTE } });
         const scannerMonitoring = Object.assign({}, commonMonitoring, { stopwatch: { max: converters.nanoseconds(GLOBAL_FREQUENCY), threshold: converters.nanoseconds(GLOBAL_THRESHOLD), mute: GLOBAL_MUTE } });
 
+        const scanner = { identity: 'Scanner', tracker: { colors: TRACKING_COLORS }, position: { x: SCANNER_X, y: SCANNER_Y }, size: { width: SCANNER_WIDTH, height: SCANNER_HEIGHT }, compressor: GLOBAL_COMPRESSOR, monitoring: scannerMonitoring };
         const sensor = {
             status: { identity: 'Game status', frequency: GLOBAL_FREQUENCY, positions: STATUS_TRACKING, compressor: GLOBAL_COMPRESSOR, monitoring: statusMonitoring },
             gate: {
-                a: { identity: 'Gate A', tracker: { colors: TRACKING_COLORS }, frequency: GLOBAL_FREQUENCY, position: { x: GATE_A_X, y: GATE_A_Y }, size: { width: GATE_WIDTH, height: GATE_HEIGHT }, compressor: GLOBAL_COMPRESSOR, tolerance: GATE_TOLERANCE, monitoring: gateMonitoring },
-                b: { identity: 'Gate B', tracker: { colors: TRACKING_COLORS }, frequency: GLOBAL_FREQUENCY, position: { x: GATE_B_X, y: GATE_B_Y }, size: { width: GATE_WIDTH, height: GATE_HEIGHT }, compressor: GLOBAL_COMPRESSOR, tolerance: GATE_TOLERANCE, monitoring: gateMonitoring }
+                a: { identity: 'A', tracker: { colors: TRACKING_COLORS }, frequency: GLOBAL_FREQUENCY, position: { x: GATE_A_X, y: GATE_A_Y }, size: { width: GATE_WIDTH, height: GATE_HEIGHT }, compressor: GLOBAL_COMPRESSOR, tolerance: GATE_TOLERANCE, monitoring: gateMonitoring, scanner },
+                b: { identity: 'B', tracker: { colors: TRACKING_COLORS }, frequency: GLOBAL_FREQUENCY, position: { x: GATE_B_X, y: GATE_B_Y }, size: { width: GATE_WIDTH, height: GATE_HEIGHT }, compressor: GLOBAL_COMPRESSOR, tolerance: GATE_TOLERANCE, monitoring: gateMonitoring }
             },
-            scanner: { identity: 'Scanner', tracker: { colors: TRACKING_COLORS }, position: { x: SCANNER_X, y: SCANNER_Y }, size: { width: SCANNER_WIDTH, height: SCANNER_HEIGHT }, compressor: GLOBAL_COMPRESSOR, monitoring: scannerMonitoring },
-            distance: { identity: 'Distance', tracker: { colors: TRACKING_COLORS }, frequency: GLOBAL_FREQUENCY, position: { x: DISTANCE_METTER_X, y: DISTANCE_METTER_Y }, size: { width: DISTANCE_METTER_WIDTH, height: DISTANCE_METTER_HEIGHT }, compressor: GLOBAL_COMPRESSOR, monitoring: distanceMonitoring },
+            distance: { identity: 'Distance', tracker: { colors: TRACKING_COLORS }, frequency: DISTANCE_FREQUENCY, position: { x: DISTANCE_METTER_X, y: DISTANCE_METTER_Y }, size: { width: DISTANCE_METTER_WIDTH, height: DISTANCE_METTER_HEIGHT }, compressor: GLOBAL_COMPRESSOR, monitoring: distanceMonitoring },
         };
 
         const monitoring = Monitoring(MONITORING_SERVER_ADDRESS, MONITORING_SERVER_PORT);
@@ -82,10 +85,12 @@ const { Monitoring } = require('./monitoring');
         const machine = Machine(MACHINE_FOLDER, monitoring);
 
         const game = Game(sensor, monitoring)
-            .on('gameover', (data) => {
+            .on('gameover', async (data) => {
+                machine.stop();
                 game.stop();
                 machine.compute(data);
-                game.start(machine.genome)
+                machine.start();
+                await game.start(machine.genome)
             });
 
         return [ game, machine ];
@@ -96,6 +101,7 @@ const { Monitoring } = require('./monitoring');
         process.exit();
     })
     .on('start', (game, machine) => {
+        machine.start();
         game.start(machine.genome);
     })
 })()

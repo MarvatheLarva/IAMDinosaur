@@ -1,7 +1,8 @@
-const robot = require('robotjs');
-const { saveCapture, Capture } = require('../../utils.js');
+// const robot = require('robotjs');
+// const { saveCapture } = require('../../utils.js');
+const { Capture, saveCapture } = require('../utils.js');
 
-robot.setMouseDelay(0);
+// robot.setMouseDelay(0);
 
 // USEFULL FOR HEIGHT & GROUND DISTANCE
 //   ▶ [ ,  ,  ,  ,  ,  ,  ,  ,  ,  ,  ]
@@ -37,7 +38,7 @@ exports.Scanner = (config, monitoring) => {
 
         await monitoring.stopwatch(config.identity, config.monitoring.stopwatch, async () => {
             const capture = Capture(config.position.x, config.position.y, config.size.width, config.size.height);
-            // saveCapture(capture.screen, './');
+            // process.exit();
             const computeHeight = new Promise(async (res, rej) => {
                 let [top, bottom] = [null, null];
                 for (let yTopCompressed = 0; yTopCompressed < (config.size.height) / config.compressor; yTopCompressed++) {
@@ -54,11 +55,12 @@ exports.Scanner = (config, monitoring) => {
                         // robot.moveMouse(capture.converters.absolute.x(xLeft), capture.converters.absolute.y(yTop))
                         // robot.moveMouse(capture.converters.absolute.x(xRight), capture.converters.absolute.y(yBottom))
 
-                        if (null !== top && null !== bottom) return res({height: bottom - top, groundDistance: config.size.height - bottom})
+                        if (null !== top && null !== bottom) return res({ height: bottom - top, groundDistance: config.size.height - bottom })
                     }
                 }
                 console.log(top, bottom);
                 rej('ERROR');
+                // res({height: 15, groundDistance: 0});
             })
 
             const computeWidth = new Promise((res, rej) => {
@@ -84,16 +86,18 @@ exports.Scanner = (config, monitoring) => {
                 }
                 console.log(left, right);
                 rej('ERROR');
+                // res(18);
             });
 
             const [computedHeight, computedWidth] = await Promise.all([computeHeight, computeWidth])
 
             monitoring.logger('-> Scanner done');
 
-
             state.height = computedHeight.height;
             state.origin = computedHeight.groundDistance;
             state.width = computedWidth;
+
+            // saveCapture(capture.screen, './');
         });
 
         return Object.assign({}, state);

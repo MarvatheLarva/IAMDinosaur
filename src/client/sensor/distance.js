@@ -1,5 +1,5 @@
 const robot = require('robotjs');
-const { Capture } = require('iamdino/utils.js');
+const { Capture } = require('../utils.js');
 
 robot.setMouseDelay(0);
 
