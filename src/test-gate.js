@@ -1,6 +1,6 @@
 // ######################        Globals          ######################
 const MOUSE_IGNORE_GATE = true;
-const MOUSE_IGNORE_DISTANCE = true;
+const MOUSE_IGNORE_DISTANCE = false;
 
 const MONITORING_SERVER_ADDRESS = '0.0.0.0';
 const MONITORING_SERVER_PORT = 2222;
@@ -14,7 +14,7 @@ const GATE_COMPRESSOR = 2;
 const GATE_SIZE = { width: 10, height: 110 };
 const GATE_POSITION = { x: 480, y: 164 };
 
-const DISTANCE_STOPWATCH_MUTE = false;
+const DISTANCE_STOPWATCH_MUTE = true;
 const DISTANCE_FREQUENCY = 5; // ms
 const DISTANCE_COMPRESSOR = 1;
 const DISTANCE_TIMEOUT = 2000;
@@ -58,8 +58,6 @@ const Controller = (monitoring) => {
 
     return Object.assign({}, {
         jump: () => {
-            if (!context.state.start) return;
-
             monitoring.logger('JUMP');
             if (!context.jumpToggle) {
                 robotjs.keyTap('up');
@@ -75,8 +73,6 @@ const Controller = (monitoring) => {
             robotjs.keyToggle('up', 'up')
         },
         crouch: () => {
-            if (!context.state.start) return;
-
             monitoring.logger('CROUCH');
             context.jumpToggle = clearTimeout(context.jumpToggle);
             
@@ -255,6 +251,7 @@ const Gate = (config, monitoring) => {
             context.state.match = true;
             context.state.activate.on = Date.now();
             
+            monitoring.logger(`[GATE] -> initialize`);
             context.emitter.emit('initialize');
         }
     }
@@ -262,6 +259,7 @@ const Gate = (config, monitoring) => {
     function terminate() {
         context.state.activate.off = Date.now();
         
+        monitoring.logger(`[GATE] -> terminate`);
         context.emitter.emit('terminate', computeState());
         clearContext();
     }
@@ -366,12 +364,11 @@ const Distance = (config, monitoring) => {
         return config.size.width;
     }
 
-    function initTimeout(func) {
-        console.log('INIT TIMEOUT');
+    function initTimeout() {
         clearTimeout(context.timeout);
         context.timeout = setTimeout(() => {
-            console.log('TIMEOUT')
-            func();
+            monitoring.logger(`[DISTANCE] -> timeout`);
+
             context.emitter.emit('timeout');
         }, config.timeout);
     }
@@ -389,16 +386,17 @@ const Distance = (config, monitoring) => {
         context.state.targets = targets;
         context.interval = setInterval(() => {
             monitoring.stopwatch('Distance', config.monitoring.stopwatch, () => {
-                // console.log(context.state);
                 if (!context.state.start) return;
 
                 if (!context.state.current && (!context.state.targets.length)) return;
                 
                 if (!context.state.current) {
                     context.state.current = context.state.targets.shift();
+
+                    monitoring.logger(`[DISTANCE] -> initialize`);
                     context.emitter.emit('initialize', context.state.current);
 
-                    initTimeout(_stop);
+                    initTimeout();
                 }
 
                 
@@ -408,19 +406,18 @@ const Distance = (config, monitoring) => {
                 
                 context.state.distance = parseCapture(capture);
                 
-                if (!context.state.passthrough && 80 > context.state.distance) {
-                    console.log('init passthrough');
+                if (!context.state.passthrough && 20 > context.state.distance) {
                     context.state.passthrough = true ;
                     context.emitter.emit('distance', context.state.distance);
-                } else if (context.state.passthrough && context.state.distance > 85) {
-                    console.log('break passthrough');
+                } else if (context.state.passthrough && context.state.distance > 25) {
                     context.state.passthrough = false;
                     context.state.current = null;
                     
                     context.emitter.emit('scored');
                 } else if (!context.state.passthrough) {
-                    console.log('OK');
+
                     console.log(context.state.distance);
+                    
                     context.emitter.emit('distance', context.state.distance);
                 }
             });
@@ -451,90 +448,6 @@ const Distance = (config, monitoring) => {
     return self();
 };
 
-// Terminal
-// const readline = require('readline');
-
-const Terminal = (config, monitoring) => {
-    const context = {
-        emitter: new EventEmitter(),
-        state: null
-    };
-
-    function clearContext() {
-        context.state = null;
-    }
-
-    function displayHelp() {
-        console.log(JSON.stringify({
-            'Press s': 'Start learning',
-            'Press S': 'Stop learning',
-            'Press r': 're-Start learning',
-            // 'Press p': 'Start game with best known genome',
-            'Press q': 'Quit game', 
-        }, null, 2));
-    }
-
-    const self = () => Object.assign({}, {
-        'context': _context,
-        'start': _start,
-        'stop': _stop,
-        'quit': _quit,
-        'on': _on,
-        'emit': _emit
-    });
-
-    function _context(func) {
-        displayHelp();
-
-        // readline.emitKeypressEvents(process.stdin);
-        // process.stdin.setRawMode(true);
-
-        context.state = func(self());
-
-        // process.stdin.on('keypress', ((args) => (str, key) => { 
-        //     if (['?', 'h'].includes(str)) displayHelp()
-
-        //     if (str === 'q') context.emitter.emit('quit', ...args, self())
-        //     if (str === 's') context.emitter.emit('start', ...args, self())
-        //     if (str === 'S') context.emitter.emit('stop', ...args, self())
-        //     if (str === 'r') context.emitter.emit('reload', ...args, self())
-        // })(context.state))
-
-        context.emitter.emit('start', ...context.state, self())
-    }
-
-    function _start() {
-        monitoring.logger('[TERMINAL] -> start');
-    }
-
-    function _stop() {
-        monitoring.logger('[TERMINAL] -> stop');
-    }
-
-    function _quit() {
-        monitoring.logger('[TERMINAL] -> quit');
-        
-        // process.stdin.setRawMode(false);
-        clearContext();
-    }
-
-    function _on(e, func) {
-        monitoring.logger(`[TERMINAL] -> register on(${e})`);
-        context.emitter.on(e, func);
-
-        return self();
-    }
-
-    function _emit(e, ...data) {
-        monitoring.logger(`[TERMINAL] -> emit on(${e})`);
-        context.emitter.emit(e, ...data);
-
-        return self();
-    }
-
-    return self();
-}
-
 // Machine
 const { Architect, Network } = require('synaptic');
 const fs = require('fs');
@@ -543,6 +456,8 @@ const cloneDeep = require('lodash/cloneDeep');
 const Machine = (config, controller, monitoring) => {
     const genetics = {
         crossOver: (netA, netB) => {
+            monitoring.logger(`[MACHINE][genetics] -> crossOver`);
+
             // Swap (50% prob.)
             if (Math.random() > 0.5) {
                 var tmp = netA;
@@ -571,6 +486,8 @@ const Machine = (config, controller, monitoring) => {
             }
         },
         mutate: (net) => {
+            monitoring.logger(`[MACHINE][genetics] -> mutate`);
+
             // Mutate
             genetics.mutateDataKeys(net.neurons, 'bias', 0.2);
             
@@ -594,6 +511,8 @@ const Machine = (config, controller, monitoring) => {
         'process': {
             location: ((location) => `${location}/process`)(config.location),
             initialize: () => {
+                monitoring.logger(`[MACHINE][networks] -> process initialize`);
+
                 for (let i = 0; i < config.network.generations; i++) {
                     const network = new Architect.Perceptron(config.network.input, config.network.layer, config.network.output);
     
@@ -602,6 +521,8 @@ const Machine = (config, controller, monitoring) => {
                 }
             },
             pick: () => {
+                monitoring.logger(`[MACHINE][networks] -> process pick`);
+
                 const location = networks.process.location;
 
                 const filename = fs.readdirSync(location).filter(e => e.match('.network')).slice(0, 1);
@@ -610,6 +531,8 @@ const Machine = (config, controller, monitoring) => {
                 return { location: path, network: Network.fromJSON(JSON.parse(fs.readFileSync(path))) };
             },
             store: (network) => {
+                monitoring.logger(`[MACHINE][networks] -> process store`);
+
                 const location = networks.process.location;
                 const filename =  `${uuid.v4()}.network`;
                 
@@ -627,6 +550,8 @@ const Machine = (config, controller, monitoring) => {
         'processed': {
             location: ((location) => `${location}/processed`)(config.location),
             meddle: () => {
+                monitoring.logger(`[MACHINE][networks] -> processed meedle`);
+
                 // pick & archive LEGACY 2 bests processed networks from PROCESSED
                 const location = networks.processed.location;
                 const score = (filename) => Number(filename.match(/[\d]{15}/).shift());
@@ -650,6 +575,8 @@ const Machine = (config, controller, monitoring) => {
                 }
             },
             clean: () => {
+                monitoring.logger(`[MACHINE][networks] -> processed cleans`);
+
                 const location = networks.processed.location;
 
                 fs.readdirSync(location)
@@ -657,6 +584,8 @@ const Machine = (config, controller, monitoring) => {
                     .map(e => fs.unlinkSync(`${location}/${e}`))
             },
             store: (processLocation, network, score) => {
+                monitoring.logger(`[MACHINE][networks] -> processed store`);
+
                 const location = networks.processed.location;
                 const scoreString = String(score);
                 const placeholdder = '000000000000000';
@@ -673,6 +602,8 @@ const Machine = (config, controller, monitoring) => {
         'legacy': {
             location: ((location) => `${location}/legacy`)(config.location),
             store: (network, score) => {
+                monitoring.logger(`[MACHINE][networks] -> legacy store`);
+
                 const location = networks.legacy.location;
                 const scoreString = String(score);
                 const placeholdder = '000000000000000';
@@ -730,7 +661,6 @@ const Machine = (config, controller, monitoring) => {
         'stop': _stop,
         'initialize': _initialize,
         'play': _play,
-        'score': _score
     });
 
     function _start() {
@@ -779,13 +709,7 @@ const Machine = (config, controller, monitoring) => {
 
         if (output > 0.55) controller.jump();
         if (output < 0.45) controller.crouch();
-    }
-
-    function _score() {
-        monitoring.logger(`[MACHINE] -> score`);
-        context.state.score++;
-    }
-    
+    }   
 
     return self();
 }
@@ -815,11 +739,11 @@ const config = {
 // ######################        Execution          ######################
 const monitoring = Monitoring(MONITORING_SERVER_ADDRESS, MONITORING_SERVER_PORT);
 
-const capturesGate = [];
-const capturesDistance = [];
-
 // Useful for debug
-async function saveCaptures() {
+async function saveCaptures(captures) {
+    const capturesGate = captures.gate;
+    const capturesDistance = captures.distance;
+
     const uniq = uuid.v4();
 
     if (capturesGate.length) monitoring.logger(`##### GATE captures: ${__dirname}/captures/gate/${1000/GATE_FREQUENCY}FPS/${uniq}`)
@@ -833,148 +757,62 @@ async function saveCaptures() {
     }
 }
 
-const sleep = require('util').promisify(setTimeout);
+// ######################        Execution          ######################
 
-Terminal(config.terminal, monitoring)
-    .on('start', async (context, gate, distance, machine, controller, terminal) => {
-        monitoring.logger('##### GAME START #####');
-        monitoring.logger('');
-        console.log('start...')
+(async () => {
+    const sleep = require('util').promisify(setTimeout);
 
-        robotjs.moveMouse(323, 251);
-        await sleep(100);
-        robotjs.mouseClick('left');
+    const context = { 
+        targets: [],
+        captures: {
+            gate: [],
+            distance: []
+        }
+    };
+            
+    const controller = Controller(monitoring);
+    const gate = Gate(config.gate, monitoring);
+    const distance = Distance(config.distance, monitoring);
+    const machine = Machine(config.machine, controller, monitoring);
+    
+    robotjs.moveMouse(323, 251);
+    
+    await sleep(100);
 
-        robotjs.keyTap('up');
+    robotjs.mouseClick('left');
+    robotjs.keyTap('up');
+    
+    monitoring.logger('##### GAME START #####');
+    
+    machine
+        .start();
 
-        gate.start();
-        distance.start(context.targets);
-        machine.start();
+    gate
+        .on('capture_match', (capture) => context.captures.gate.push(capture))
+        .on('capture_terminate', (capture) => context.captures.gate.push(capture))
+        .on('terminate', (target) => context.targets.push(target) )
+        .start();
+    
+    distance
+        .on('capture', (capture) => context.captures.distance.push(capture))
+        .on('initialize', (target) => machine.initialize(target) )
+        .on('distance', (distance) => machine.play({ distance }) )
+        .on('timeout', async () => {
+            gate.stop();
+            distance.stop();
+            machine.stop();
+    
+            await saveCaptures(context.captures);
+    
+            monitoring.logger('##### GAME OVER #####');
+            monitoring.logger('');
+    
+            await sleep(2000);
+    
+            process.exit();
+        })
+        .start(context.targets);
+    
+})()
 
-        controller.start();
-    })
-    .on('stop', async (context, gate, distance, machine, controller, terminal) => {
-        monitoring.logger('##### GAME STOP #####');
-        monitoring.logger('');
-        console.log('stop...')
-
-        terminal.stop();
-
-        gate.stop();
-        distance.stop();
-        machine.stop();
-        terminal.stop();
-
-        await saveCaptures();
-
-        capturesGate.splice(0, capturesGate.length)
-        capturesDistance.splice(0, capturesDistance.length)
-    })
-    .on('quit', async (context, gate, distance, machine, controller, terminal) => {
-        monitoring.logger('##### QUIT #####');
-        console.log('quit...')
-
-        terminal.stop();
-
-        gate.stop();
-        distance.stop();
-        terminal.quit()
-
-        await saveCaptures();
-
-        await sleep(2000);
-
-        process.exit();
-    })
-    .on('reload', async (context, gate, distance, machine, controller, terminal) => {
-        monitoring.logger('##### GAME RELOAD #####');
-        monitoring.logger('');
-        console.log('reload...')
-
-        // HACK
-        // setTimeout(() => { robotjs.mouseClick('left') }, 10000)
-
-        robotjs.moveMouse(659, 359);
-        await sleep(100);
-        robotjs.mouseClick();
-
-        gate.stop();
-        distance.stop();
-        machine.stop();
-
-        await sleep(2000);
-
-        await saveCaptures();
-
-        capturesGate.splice(0, capturesGate.length)
-        capturesDistance.splice(0, capturesDistance.length)
-        
-        await sleep(2000);
-
-        robotjs.moveMouse(323, 251);
-        await sleep(100);
-        robotjs.mouseClick('left');
-
-        robotjs.keyTap('up');
-
-        await sleep(500);
-
-        heapdump.writeSnapshot((err, filename) => {
-            console.log("Heap dump written to", filename);
-        });
-
-        
-        context.targets.splice(0, context.targets.length);
-
-        gate.start();
-        distance.start(context.targets);
-        machine.start();
-
-        controller.start();
-    })
-    .context((terminal) => {
-        const context = { targets: [] };
-        
-        const controller = Controller(monitoring);
-        const gate = Gate(config.gate, monitoring);
-        const distance = Distance(config.distance, monitoring);
-        const machine = Machine(config.machine, controller, monitoring);
-
-        return [
-            context,
-            gate
-                // .on('capture_match', (capture) => capturesGate.push(capture))
-                // .on('capture_terminate', (capture) => capturesGate.push(capture))
-                .on('initialize', () => monitoring.logger('Gate -> initialize'))
-                .on('terminate', (target) => {
-                    context.targets.push(target)
-                    monitoring.logger(`Gate -> terminate ${JSON.stringify(target)}`)
-                }),
-
-            distance
-                // .on('capture', (capture) => capturesDistance.push(capture))
-                .on('initialize', (target) => {
-                    monitoring.logger('Distance -> initialize');
-                    monitoring.logger(JSON.stringify(target))
-
-                    machine.initialize(target);
-                })
-                .on('distance', (distance) => {
-                    // monitoring.distance('Distance -> ' + distance);
-
-                    machine.play({ distance });
-                })
-                .on('scored', () => {
-                    monitoring.logger('Distance -> ~scored');
-                    machine.score();
-                })
-                .on('timeout', () => {
-                    monitoring.logger('Distance -> timeout');
-                    controller.stop();
-                    terminal.emit('quit', context, gate, distance, machine, controller, terminal);
-                }),
-            machine,
-            controller
-        ]
-    })
 // ######################        /Execution          ######################
