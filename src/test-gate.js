@@ -16,7 +16,7 @@ const GATE_POSITION = { x: 480, y: 164 };
 
 const DISTANCE_STOPWATCH_MUTE = true;
 const DISTANCE_FREQUENCY = 10; // ms
-const DISTANCE_COMPRESSOR = 2;
+const DISTANCE_COMPRESSOR = 1;
 const DISTANCE_TIMEOUT = 2000;
 
 const DISTANCE_POSITION = { x: 90, y: 278 };
@@ -28,11 +28,6 @@ const MACHINE_NETWORK_GENERATIONS = 12;
 const MACHINE_NETWORK_INPUT = 5;
 const MACHINE_NETWORK_LAYER = 4;
 const MACHINE_NETWORK_OUTPUT = 1;
-
-const MACHINE_MIN_WIDTH = 0;
-const MACHINE_MIN_HEIGHT = 0;
-const MACHINE_MIN_DISTANCE = 0;
-const MACHINE_MIN_SPEED = 0;
 
 const MACHINE_MAX_WIDTH = 50;
 const MACHINE_MAX_HEIGHT = 50;
@@ -50,37 +45,54 @@ const robotjs = require('robotjs');
 robotjs.setMouseDelay(0);
 robotjs.setKeyboardDelay(0);
 
-const Controller = () => {
+const Controller = (monitoring) => {
     const context = {
+        state: {
+            start: false
+        },
         jumpToggle: null,
         crouchToggle: null,
     };
 
     return Object.assign({}, {
         jump: () => {
+            if (!context.state.start) return;
+
+            monitoring.logger('JUMP');
             if (!context.jumpToggle) {
-                // console.log('JUMP');
                 robotjs.keyTap('up');
                 context.jumpToggle = setTimeout(() => {
                     context.jumpToggle = null;
-                }, 1000/60)
+                }, 500)
             }
 
-            clearTimeout(context.crouchToggle);
+            context.crouchToggle = clearTimeout(context.crouchToggle);
+        },
+        normal: () => {
+            context.crouchToggle = robotjs.keyToggle('down', 'up');
+            robotjs.keyToggle('up', 'up')
         },
         crouch: () => {
+            if (!context.state.start) return;
+
+            monitoring.logger('CROUCH');
+            context.jumpToggle = clearTimeout(context.jumpToggle);
+            
             if (!context.crouchToggle) {
-                // console.log('CROUCH');
                 robotjs.keyToggle('down', 'down');
             }
 
-            clearTimeout(context.crouchToggle);
-            clearTimeout(context.jumpToggle);
-
+            context.crouchToggle = clearTimeout(context.crouchToggle);
             context.crouchToggle = setTimeout(() => {
-                robotjs.keyToggle('down', 'up')
-                context.crouchToggle = null;
-            }, 1000)
+                context.crouchToggle = clearTimeout();
+                robotjs.keyToggle('down', 'up');
+            }, 500)
+        },
+        start: () => {
+            context.state.start = true;
+        },
+        stop: () => {
+            context.state.start = false;
         }
     })
 };
@@ -179,6 +191,7 @@ const Gate = (config, monitoring) => {
         emitter: new EventEmitter(),
         interval: null,
         state: {
+            start: false,
             match: false,
             positions: [],
             activate: { on: null, off: null },
@@ -206,30 +219,33 @@ const Gate = (config, monitoring) => {
     }
     
     function captureWidth(origin, height) {
-        const x = config.position.x - 100;
+        const x = config.position.x - 80;
         const y = config.position.y + config.size.height - origin - (height / 2);
-        const capture = Capture(x, y, 100, 1);
+        const capture = Capture(x, y, 80, 1);
 
         context.emitter.emit('capture_terminate', capture);
         
-        let tolerance = 5;
+        // let tolerance = 3;
         let width = 0;
-        for (let i = 99 / config.compressor; i >= 0; i--) {
-            if (tolerance === 0) break;
+        for (let i = 79; i >= 0; i--) {
+            // if (tolerance === 0) break;
             
-            if(config.tracker.colors.includes(capture.colorAt(i * config.compressor, 0))) {
+            if(config.tracker.colors.includes(capture.colorAt(i, 0))) {
                 width++;
-                tolerance = 5;
-            } else if (width > 0) {
-                tolerance--;
-                width++;
+                // tolerance = 5;
             }
+            // else if (width > 0) {
+            //     tolerance--;
+            //     width++;
+            // }
         }
         
         return width;
     }
     
     function initialize(y) {
+        if (!context.state.start) return;
+
         context.state.positions.push(y);
         context.state.width++;
         
@@ -254,9 +270,12 @@ const Gate = (config, monitoring) => {
     });
     
     function _start() {
+        context.state.start = true;
         monitoring.logger(`[GATE] -> start`);
         context.interval = setInterval(() => {
             monitoring.stopwatch('Gate', config.monitoring.stopwatch, () => {
+                if (!context.state.start) return;
+
                 const capture = Capture(config.position.x, config.position.y, config.size.width, config.size.height);
                 
                 
@@ -314,6 +333,7 @@ const Distance = (config, monitoring) => {
         interval: null,
         timeout: null,
         state: {
+            start: false,
             targets: null,
             current: null,
             distance: null,
@@ -359,10 +379,14 @@ const Distance = (config, monitoring) => {
 
     function _start(targets) {
         monitoring.logger(`[DISTANCE] -> start`);
+        context.state.start = true;
 
         context.state.targets = targets;
         context.interval = setInterval(() => {
             monitoring.stopwatch('Distance', config.monitoring.stopwatch, () => {
+                // console.log(context.state);
+                if (!context.state.start) return;
+
                 if (!context.state.current && (!context.state.targets.length)) return;
                 
                 if (!context.state.current) {
@@ -377,15 +401,16 @@ const Distance = (config, monitoring) => {
                 context.emitter.emit('capture', capture);
 
                 context.state.distance = parseCapture(capture);
-
-                if (!context.state.passthrough && 5 > context.state.distance) {
+                
+                if (!context.state.passthrough && 20 > context.state.distance) {
                     context.state.passthrough = true ;
-                } else if (context.state.passthrough && context.state.distance > 5) {
+                } else if (context.state.passthrough && context.state.distance > 25) {
                     context.state.passthrough = false;
                     context.state.current = null;
                     
                     context.emitter.emit('scored');
-                } else if (!context.state.passthrough && context.state.distance > 5) {
+                } else if (!context.state.passthrough) {
+                    // console.log(context.state.distance);
                     context.emitter.emit('distance', context.state.distance);
                 }
             });
@@ -396,6 +421,7 @@ const Distance = (config, monitoring) => {
 
     function _stop() {
         monitoring.logger(`[DISTANCE] -> stop`);
+        context.state.start = false;
 
         clearTimeout(context.timeout);
         clearInterval(context.interval);
@@ -590,7 +616,7 @@ const Machine = (config, controller, monitoring) => {
             meddle: () => {
                 // pick & archive LEGACY 2 bests processed networks from PROCESSED
                 const location = networks.processed.location;
-                const score = (filename) => Number(filename.match(/[\d]{6}/).shift());
+                const score = (filename) => Number(filename.match(/[\d]{15}/).shift());
 
                 const [best1, best2] = fs.readdirSync(location)
                     .filter(e => e.match('.network'))
@@ -620,8 +646,7 @@ const Machine = (config, controller, monitoring) => {
             store: (processLocation, network, score) => {
                 const location = networks.processed.location;
                 const scoreString = String(score);
-                const placeholdder = '000000';
-
+                const placeholdder = '000000000000000';
                 const filename =  `${placeholdder.slice(0, placeholdder.length - scoreString.length)}${scoreString}-${uuid.v4()}.network`;
                 const path = `${location}/${filename}`;
 
@@ -637,7 +662,7 @@ const Machine = (config, controller, monitoring) => {
             store: (network, score) => {
                 const location = networks.legacy.location;
                 const scoreString = String(score);
-                const placeholdder = '000000';
+                const placeholdder = '000000000000000';
 
                 const filename =  `${placeholdder.slice(0, placeholdder.length - scoreString.length)}${scoreString}-${uuid.v4()}.network`;
                 const path = `${location}/${filename}`;
@@ -653,6 +678,8 @@ const Machine = (config, controller, monitoring) => {
         network: null,
         location: null,
         state: {
+            on: null,
+            off: null,
             score: 0,
             inputs: {
                 width: null,
@@ -668,6 +695,8 @@ const Machine = (config, controller, monitoring) => {
         context.network = null;
         context.location = null;
         context.state.score = 0;
+        context.state.on = null;
+        context.state.off = null;
         context.state.inputs = {
             width: null,
             height: null,
@@ -700,14 +729,19 @@ const Machine = (config, controller, monitoring) => {
 
         context.network = data.network;
         context.location = data.location;
+        context.state.on = Date.now();
     }
 
     function _stop() {
         monitoring.logger(`[MACHINE] -> stop`);
-        console.log(context.state.score);
-        networks.processed.store(context.location, context.network, context.state.score);
+        context.state.off = Date.now();
+        const score = context.state.off - context.state.on;
+
+        console.log(score);
+        networks.processed.store(context.location, context.network, score);
 
         if (networks.process.isEmpty()) {
+            monitoring.logger('[MACHINE] -> meddle networks')
             networks.processed.meddle();
         }
 
@@ -736,7 +770,6 @@ const Machine = (config, controller, monitoring) => {
 
     function _score() {
         monitoring.logger(`[MACHINE] -> score`);
-        console.log('+score');
         context.state.score++;
     }
     
@@ -776,30 +809,40 @@ const capturesDistance = [];
 async function saveCaptures() {
     const uniq = uuid.v4();
 
-    if (capturesGate.length) monitoring.logger(`GAME GATE captures: ${__dirname}/captures/GATE/${1000/GATE_FREQUENCY}FPS/${uniq}`)
+    if (capturesGate.length) monitoring.logger(`##### GATE captures: ${__dirname}/captures/gate/${1000/GATE_FREQUENCY}FPS/${uniq}`)
     for (const capture of capturesGate) {
         await saveCapture(capture.screen, `./captures/GATE/${1000/GATE_FREQUENCY}FPS/${uniq}`, 'rec-');
     }
 
-    if (capturesDistance.length) monitoring.logger(`GAME DISTANCE captures: ${__dirname}/captures/DISTANCE/${1000/GATE_FREQUENCY}FPS/${uniq}`)
+    if (capturesDistance.length) monitoring.logger(`##### DISTANCE captures: ${__dirname}/captures/distance/${1000/DISTANCE_FREQUENCY}FPS/${uniq}`)
     for (const capture of capturesDistance) {
-        await saveCapture(capture.screen, `./captures/DISTANCE/${1000/GATE_FREQUENCY}FPS/${uniq}`, 'rec-');
+        await saveCapture(capture.screen, `./captures/DISTANCE/${1000/DISTANCE_FREQUENCY}FPS/${uniq}`, 'rec-');
     }
 }
 
 const sleep = require('util').promisify(setTimeout);
 
 Terminal(config.terminal, monitoring)
-    .on('start', (context, gate, distance, machine, controller, terminal) => {
+    .on('start', async (context, gate, distance, machine, controller, terminal) => {
         monitoring.logger('##### GAME START #####');
+        monitoring.logger('');
         console.log('start...')
+
+        robotjs.moveMouse(323, 251);
+        await sleep(100);
+        robotjs.mouseClick('left');
+
+        robotjs.keyTap('up');
 
         gate.start();
         distance.start(context.targets);
         machine.start();
+
+        controller.start();
     })
     .on('stop', async (context, gate, distance, machine, controller, terminal) => {
         monitoring.logger('##### GAME STOP #####');
+        monitoring.logger('');
         console.log('stop...')
 
         terminal.stop();
@@ -832,7 +875,15 @@ Terminal(config.terminal, monitoring)
     })
     .on('reload', async (context, gate, distance, machine, controller, terminal) => {
         monitoring.logger('##### GAME RELOAD #####');
+        monitoring.logger('');
         console.log('reload...')
+
+        // HACK
+        // setTimeout(() => { robotjs.mouseClick('left') }, 10000)
+
+        robotjs.moveMouse(659, 359);
+        await sleep(100);
+        robotjs.mouseClick();
 
         gate.stop();
         distance.stop();
@@ -842,24 +893,32 @@ Terminal(config.terminal, monitoring)
 
         await saveCaptures();
 
-        controller.jump();
+        capturesGate.splice(0, capturesGate.length)
+        capturesDistance.splice(0, capturesDistance.length)
         
-        await sleep(1000);
-        
-        controller.jump();
+        await sleep(2000);
 
-        await sleep(1000);
+        robotjs.moveMouse(323, 251);
+        await sleep(100);
+        robotjs.mouseClick('left');
+
+        robotjs.keyTap('up');
+
+        await sleep(500);
+
         
         context.targets.splice(0, context.targets.length);
 
         gate.start();
         distance.start(context.targets);
         machine.start();
+
+        controller.start();
     })
     .context((terminal) => {
         const context = { targets: [] };
         
-        const controller = Controller();
+        const controller = Controller(monitoring);
         const gate = Gate(config.gate, monitoring);
         const distance = Distance(config.distance, monitoring);
         const machine = Machine(config.machine, controller, monitoring);
@@ -867,13 +926,16 @@ Terminal(config.terminal, monitoring)
         return [
             context,
             gate
-                .on('capture_match', (capture) => capturesGate.push(capture))
-                .on('capture_terminate', (capture) => capturesGate.push(capture))
+                // .on('capture_match', (capture) => capturesGate.push(capture))
+                // .on('capture_terminate', (capture) => capturesGate.push(capture))
                 .on('initialize', () => monitoring.logger('Gate -> initialize'))
-                .on('terminate', (target) => context.targets.push(target) && monitoring.logger('Gate -> terminate')),
+                .on('terminate', (target) => {
+                    context.targets.push(target)
+                    monitoring.logger(`Gate -> terminate ${JSON.stringify(target)}`)
+                }),
 
             distance
-                .on('capture', (capture) => capturesDistance.push(capture))
+                // .on('capture', (capture) => capturesDistance.push(capture))
                 .on('initialize', (target) => {
                     monitoring.logger('Distance -> initialize');
                     monitoring.logger(JSON.stringify(target))
@@ -887,12 +949,11 @@ Terminal(config.terminal, monitoring)
                 })
                 .on('scored', () => {
                     monitoring.logger('Distance -> ~scored');
-                    console.log('SCORED')
                     machine.score();
                 })
                 .on('timeout', () => {
                     monitoring.logger('Distance -> timeout');
-
+                    controller.stop();
                     terminal.emit('reload', context, gate, distance, machine, controller, terminal);
                 }),
             machine,
