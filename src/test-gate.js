@@ -14,8 +14,8 @@ const GATE_COMPRESSOR = 2;
 const GATE_SIZE = { width: 10, height: 110 };
 const GATE_POSITION = { x: 480, y: 164 };
 
-const DISTANCE_STOPWATCH_MUTE = true;
-const DISTANCE_FREQUENCY = 10; // ms
+const DISTANCE_STOPWATCH_MUTE = false;
+const DISTANCE_FREQUENCY = 5; // ms
 const DISTANCE_COMPRESSOR = 1;
 const DISTANCE_TIMEOUT = 2000;
 
@@ -34,6 +34,8 @@ const MACHINE_MAX_HEIGHT = 50;
 const MACHINE_MAX_DISTANCE = DISTANCE_SIZE.width;
 const MACHINE_MAX_SPEED = 0.5;
 const DISTANCE_MAX_ORIGIN = GATE_SIZE.height;
+
+const heapdump = require("heapdump");
 
 
 // ######################        /Globals          ######################
@@ -364,9 +366,12 @@ const Distance = (config, monitoring) => {
         return config.size.width;
     }
 
-    function initTimeout() {
+    function initTimeout(func) {
+        console.log('INIT TIMEOUT');
         clearTimeout(context.timeout);
         context.timeout = setTimeout(() => {
+            console.log('TIMEOUT')
+            func();
             context.emitter.emit('timeout');
         }, config.timeout);
     }
@@ -393,24 +398,29 @@ const Distance = (config, monitoring) => {
                     context.state.current = context.state.targets.shift();
                     context.emitter.emit('initialize', context.state.current);
 
-                    initTimeout();
+                    initTimeout(_stop);
                 }
 
+                
                 const capture = Capture(config.position.x, config.position.y - (context.state.current.height / 2 + context.state.current.origin), config.size.width, 1);
-
+                
                 context.emitter.emit('capture', capture);
-
+                
                 context.state.distance = parseCapture(capture);
                 
-                if (!context.state.passthrough && 20 > context.state.distance) {
+                if (!context.state.passthrough && 80 > context.state.distance) {
+                    console.log('init passthrough');
                     context.state.passthrough = true ;
-                } else if (context.state.passthrough && context.state.distance > 25) {
+                    context.emitter.emit('distance', context.state.distance);
+                } else if (context.state.passthrough && context.state.distance > 85) {
+                    console.log('break passthrough');
                     context.state.passthrough = false;
                     context.state.current = null;
                     
                     context.emitter.emit('scored');
                 } else if (!context.state.passthrough) {
-                    // console.log(context.state.distance);
+                    console.log('OK');
+                    console.log(context.state.distance);
                     context.emitter.emit('distance', context.state.distance);
                 }
             });
@@ -420,12 +430,13 @@ const Distance = (config, monitoring) => {
     }
 
     function _stop() {
-        monitoring.logger(`[DISTANCE] -> stop`);
         context.state.start = false;
-
+        
         clearTimeout(context.timeout);
         clearInterval(context.interval);
         clearContext();
+
+        monitoring.logger(`[DISTANCE] -> stop`);
 
         return self();
     }
@@ -441,7 +452,7 @@ const Distance = (config, monitoring) => {
 };
 
 // Terminal
-const readline = require('readline');
+// const readline = require('readline');
 
 const Terminal = (config, monitoring) => {
     const context = {
@@ -475,19 +486,21 @@ const Terminal = (config, monitoring) => {
     function _context(func) {
         displayHelp();
 
-        readline.emitKeypressEvents(process.stdin);
-        process.stdin.setRawMode(true);
+        // readline.emitKeypressEvents(process.stdin);
+        // process.stdin.setRawMode(true);
 
         context.state = func(self());
 
-        process.stdin.on('keypress', ((args) => (str, key) => { 
-            if (['?', 'h'].includes(str)) displayHelp()
+        // process.stdin.on('keypress', ((args) => (str, key) => { 
+        //     if (['?', 'h'].includes(str)) displayHelp()
 
-            if (str === 'q') context.emitter.emit('quit', ...args, self())
-            if (str === 's') context.emitter.emit('start', ...args, self())
-            if (str === 'S') context.emitter.emit('stop', ...args, self())
-            if (str === 'r') context.emitter.emit('reload', ...args, self())
-        })(context.state))
+        //     if (str === 'q') context.emitter.emit('quit', ...args, self())
+        //     if (str === 's') context.emitter.emit('start', ...args, self())
+        //     if (str === 'S') context.emitter.emit('stop', ...args, self())
+        //     if (str === 'r') context.emitter.emit('reload', ...args, self())
+        // })(context.state))
+
+        context.emitter.emit('start', ...context.state, self())
     }
 
     function _start() {
@@ -501,7 +514,7 @@ const Terminal = (config, monitoring) => {
     function _quit() {
         monitoring.logger('[TERMINAL] -> quit');
         
-        process.stdin.setRawMode(false);
+        // process.stdin.setRawMode(false);
         clearContext();
     }
 
@@ -906,6 +919,10 @@ Terminal(config.terminal, monitoring)
 
         await sleep(500);
 
+        heapdump.writeSnapshot((err, filename) => {
+            console.log("Heap dump written to", filename);
+        });
+
         
         context.targets.splice(0, context.targets.length);
 
@@ -954,7 +971,7 @@ Terminal(config.terminal, monitoring)
                 .on('timeout', () => {
                     monitoring.logger('Distance -> timeout');
                     controller.stop();
-                    terminal.emit('reload', context, gate, distance, machine, controller, terminal);
+                    terminal.emit('quit', context, gate, distance, machine, controller, terminal);
                 }),
             machine,
             controller
