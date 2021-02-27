@@ -10,5 +10,9 @@
     "robotjs": "^0.6.0",
     "synaptic": "^1.1.4",
     "uuid": "^8.3.2"
+  },
+  "scripts":  {
+    "start": "pm2 start ./src/test-gate.js --no-daemon",
+    "stop": "pm2 stop ./src/test-gate.js"
   }
 }
