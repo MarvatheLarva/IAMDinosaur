@@ -12,7 +12,7 @@
     "uuid": "^8.3.2"
   },
   "scripts":  {
-    "start": "pm2 start ./src/test-gate.js --no-daemon",
+    "start": "pm2 start ./src/test-gate.js",
     "stop": "pm2 stop ./src/test-gate.js"
   }
 }

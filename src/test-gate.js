@@ -792,13 +792,13 @@ async function saveCaptures(captures) {
         .start();
 
     gate
-        .on('capture_match', (capture) => context.captures.gate.push(capture))
-        .on('capture_terminate', (capture) => context.captures.gate.push(capture))
+        // .on('capture_match', (capture) => context.captures.gate.push(capture))
+        // .on('capture_terminate', (capture) => context.captures.gate.push(capture))
         .on('terminate', (target) => context.targets.push(target) )
         .start();
     
     distance
-        .on('capture', (capture) => context.captures.distance.push(capture))
+        // .on('capture', (capture) => context.captures.distance.push(capture))
         .on('initialize', (target) => machine.initialize(target) )
         .on('distance', (distance) => machine.play({ distance }) )
         .on('timeout', async () => {

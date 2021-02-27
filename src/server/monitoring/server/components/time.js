@@ -7,10 +7,10 @@ exports.Time = (layout, name, max, threshold, color = 'green') => {
 
     const line = contrib.line({
         label: ` ${ state.name } - Maximum ${ converters.milliseconds(state.max).toFixed(2) } ms - Threshold ${ converters.milliseconds(state.threshold).toFixed(2) } ms `, 
-        height: 8,
+        height: layout.height - 2,
         width: layout.width - 2,
-        top: 1,
-        left: 1,
+        // top: 1,
+        // left: 1,
         border: { type: 'line', fg: 'white'},
         showNthLabel: 100,
         maxY: converters.milliseconds(state.maxY),
@@ -58,6 +58,5 @@ exports.Time = (layout, name, max, threshold, color = 'green') => {
         points.push(value);
 
         line.setData(setData(converters.milliseconds(measure), points, color));
-        // layout.render();
     }
 }

@@ -1,6 +1,7 @@
 exports.PROBE_TYPES = {
   time: 'time',
   stopwatch: 'stopwatch',
+  distance: 'distance',
   log: 'logger'
 }
 
