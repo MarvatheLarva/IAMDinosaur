@@ -3,16 +3,14 @@
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.8.21",
     "colors": "^1.4.0",
-    "heapdump": "^0.3.15",
-    "jimp": "^0.16.1",
-    "module-alias": "^2.2.2",
-    "node-addon-api": "^3.1.0",
+    "dotenv": "^8.2.0",
     "robotjs": "^0.6.0",
     "synaptic": "^1.1.4",
     "uuid": "^8.3.2"
   },
-  "scripts":  {
-    "start": "pm2 start ./src/test-gate.js",
-    "stop": "pm2 stop ./src/test-gate.js"
+  "scripts": {
+    "start": "pm2 start ./src/game.js",
+    "stop": "pm2 stop ./src/game.js",
+    "monitoring": "node ./src/monitoring.js"
   }
 }

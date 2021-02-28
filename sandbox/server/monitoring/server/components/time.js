@@ -9,8 +9,6 @@ exports.Time = (layout, name, max, threshold, color = 'green') => {
         label: ` ${ state.name } - Maximum ${ converters.milliseconds(state.max).toFixed(2) } ms - Threshold ${ converters.milliseconds(state.threshold).toFixed(2) } ms `, 
         height: layout.height - 2,
         width: layout.width - 2,
-        // top: 1,
-        // left: 1,
         border: { type: 'line', fg: 'white'},
         showNthLabel: 100,
         maxY: converters.milliseconds(state.maxY),
