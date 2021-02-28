@@ -106,3 +106,4 @@ dist
 captures/
 machine/
 machine.old/
+.env

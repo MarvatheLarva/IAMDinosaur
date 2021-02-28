@@ -8,7 +8,7 @@ const screen = blessed.screen({ fastCSR: true });
 const layoutLeft = blessed.layout({
     bottom: 0,
     parent: screen,
-    width: 71,
+    width: Number(process.env.MONITORING_LAYOUT_LEFT),
     height: 30,
     bg: 'green',
     border: { type: 'line', fg: 'white'}
@@ -17,7 +17,7 @@ const layoutLeft = blessed.layout({
 const layoutRight = blessed.layout({
     right: 0,
     parent: screen,
-    width: 133,
+    width: Number(process.env.MONITORING_LAYOUT_RIGHT),
     height: 50,
     bg: 'red',
     border: { type: 'line', fg: 'white'}
