@@ -11,8 +11,6 @@ const DISTANCE_SIZE = { width: Number(process.env.DISTANCE_SIZE_WIDTH), height: 
 
 const MACHINE_LOCATION = __dirname + '/../machine';
 
-console.log(GATE_SIZE);
-
 // ######################        /Globals          ######################
 
 // ######################        Utils          ######################
@@ -98,7 +96,6 @@ const saveCapture = async (capture, path) => {
             const filename = `${Date.now()}`;
             const pixelsShit = [];
             for (let y = 0; y < capture.height; y++) {
-                const captured = [];
                 for (let x = 0; x < capture.width; x++) {
                     pixelsShit.push(`<div style="width:1px;height:1px;position:absolute;top:${y}px;left:${x}px;background:#${capture.colorAt(x, y)};"></div>`);
                 }
@@ -156,9 +153,9 @@ const Monitoring = (address, port) => {
             if (!config.mute)
                 client({ type: config.type, data: converters.milliseconds(measure) });
             
-            if (measure < config.max && resolve) {
-                resolve()
-            } //else if (measure > config.max) { self().logger(`{red-fg}****** [WARNING][${config.type}] SKIP FRAME ${measure}/${config.max}{/red-fg}`) }
+            //if (measure < config.max && resolve) {
+                if (resolve) resolve()
+            //} //else if (measure > config.max) { self().logger(`{red-fg}****** [WARNING][${config.type}] SKIP FRAME ${measure}/${config.max}{/red-fg}`) }
         })(monitoringClient),
         distanceMetter: ((client) => (distance) => {
             client({ type: MONITORING_TYPES.distanceMetter, data:distance })
@@ -318,6 +315,180 @@ const Gate = (config, monitoring) => {
     return self();
 };
 
+const Gate2 = (config, monitoring) => {
+    const context = {
+        emitter: new EventEmitter(),
+        interval: null,
+        state: {
+            match: false,
+            positions: [],
+            activate: { on: null, off: null },
+            width: 0,
+            locked: false
+        }
+    };
+    
+    function clearContext() {
+        context.interval = null;
+        context.state.match = false;
+        context.state.positions = [];
+        context.activate = { on: null, off: null };
+        context.state.width = 0;
+    }
+    
+    function computeState() {
+        context.state.positions.sort((a, b) =>  b-a);
+        
+        const duration = context.state.activate.off - context.state.activate.on;
+        const { width, height, origin } = captureDetails();
+        
+        return ({ origin, height, width, speed: width/duration });
+    }
+    
+    function captureDetails() {
+        const maxWidth = 100;
+
+        const x = config.position.x - maxWidth;
+        const y = config.position.y;
+
+        const capture = Capture(x, y, maxWidth, config.size.height);
+
+        context.emitter.emit('capture_terminate', capture);
+
+        const matches = { left: null, right: null, top: null, bottom: null};
+        // capture width
+        for (let xLeft = 0; xLeft < maxWidth; xLeft++) {
+            const xRight = maxWidth - xLeft - 1;
+            for (let y = 0; y < config.size.height; y++) {
+                const [left, right] = [
+                    matches.left ? null : config.tracker.colors.includes(capture.colorAt(xLeft, y)), 
+                    matches.right ? null : config.tracker.colors.includes(capture.colorAt(xRight, y))
+                ];
+            
+                if (left) { matches.left = xLeft }
+
+                if (right) { matches.right = xRight }
+
+                if (null !== matches.left && null !== matches.right) { break }
+            }
+
+            if (null !== matches.left && null !== matches.right) { break }
+        }
+
+        // capture height
+        for (let yTop = 0; yTop < config.size.height; yTop++) {
+            const yBottom = config.size.height - yTop  - 1;
+            for (let x = 0; x < maxWidth; x++) {
+                const [top, bottom] = [
+                    matches.top ? null : config.tracker.colors.includes(capture.colorAt(x, yTop)), 
+                    matches.bottom ? null : config.tracker.colors.includes(capture.colorAt(x, yBottom))
+                ];
+            
+                if (top) { matches.top = yTop }
+
+                if (bottom) { matches.bottom = yBottom }
+
+                if (null !== matches.top && null !== matches.bottom) { break }
+            }
+
+            if (null !== matches.top && null !== matches.bottom) { break }
+        }
+
+        if ((!matches.top || !matches.bottom)) {
+            monitoring.logger(`{red-fg}[GATE] -> [WARNING] missing target ....{/red-fg}`);
+            throw new Error('Frame missing')
+        }
+        
+        return { width: matches.right - matches.left, height: matches.bottom - matches.top, origin: config.size.height - matches.bottom - 1 };
+    }
+    
+    function initialize() {
+        context.state.match = true;
+        context.state.activate.on = Date.now();
+        
+        monitoring.logger(`[GATE] -> initialize`);
+        context.emitter.emit('initialize');
+    }
+    
+    function terminate() {
+        context.state.activate.off = Date.now();
+        
+        monitoring.logger(`[GATE] -> terminate`);
+        try {
+            context.emitter.emit('terminate', computeState());
+        } catch (e) {
+            context.emitter.emit('reload');
+        }
+        clearContext();
+    }
+    const self = () => Object.assign({}, {
+        'start': _start,
+        'stop': _stop,
+        'on': _on
+    });
+    
+    function _start() {
+        monitoring.logger(`[GATE] -> start`);
+        context.interval = setInterval(async () => {
+            if (context.state.locked) return;
+
+            context.state.locked = true;
+            await monitoring.stopwatch('Gate', config.monitoring.stopwatch, () => {
+                const capture = Capture(config.position.x, config.position.y, config.size.width, config.size.height);
+                const heightCompressed = (config.size.height - 1) / config.compressor;
+                const widthCompressed = (config.size.width - 1) / config.compressor;
+                const trackers = 2;
+                
+                let localMatch = false;
+                for (let x = 0; x/config.compressor < widthCompressed; x++) {                                         
+                    for (let y = 0; y/config.compressor < heightCompressed/trackers; y++) {                       
+
+                        MoveMouse(true)(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
+                        MoveMouse(true)(capture.converters.absolute.x(x), capture.converters.absolute.y((config.size.height - 1) - y));
+
+                        const [top, bottom] = [
+                            config.tracker.colors.includes(capture.colorAt(x, y)), 
+                            config.tracker.colors.includes(capture.colorAt(x, (config.size.height - 1) - y))
+                        ];
+
+                        if (top || bottom) { localMatch = true; break; }
+                    }
+                    if (localMatch) { break }
+                }
+
+                
+                if (localMatch) context.emitter.emit('capture_match', capture);
+                
+                if (!context.state.match && localMatch) { return () => initialize() }
+                
+                if (context.state.match && !localMatch) { return () => terminate() }
+            });
+            context.state.locked = false;
+        }, config.frequency);
+
+        return self();
+    }
+    
+    function _stop() {
+        monitoring.logger(`[GATE] -> stop`);
+
+        clearInterval(context.interval);
+        clearContext();
+
+        return self();
+    }
+    
+    function _on(e, func) {
+        monitoring.logger(`[GATE] -> register on(${e})`);
+
+        context.emitter.on(e, func);
+        
+        return self();
+    }
+    
+    return self();
+};
+
 const Distance = (config, monitoring) => {
     const context = {
         emitter: new EventEmitter(),
@@ -400,21 +571,18 @@ const Distance = (config, monitoring) => {
                 
                 if (!context.state.passthrough && 40 > context.state.distance) {
                     context.state.passthrough = true ;
-                    // console.log('PASSTHROUGH');
                     
                     return () => context.emitter.emit('distance', context.state.distance);
                 } else if (context.state.passthrough && context.state.distance > 50) {
                     context.state.passthrough = false;
                     context.state.current = null;
-                    
-                    // console.log('SCORED');
-                    
+                                        
                     monitoring.logger('[DISTANCE] -> scored');
                     
                     return () => context.emitter.emit('scored');
                 } else if (!context.state.passthrough) {
                     if (context.state.distance > 260) return;
-                    // console.log('.');
+
                     return () => context.emitter.emit('distance', context.state.distance);
                 }
             });
@@ -723,7 +891,7 @@ const Machine = (config, controller, monitoring) => {
         networks.processed.store(context.location, context.network, context.state.score);
 
         if (networks.process.isEmpty()) {
-            monitoring.logger('[MACHINE] -> meddle networks')
+            monitoring.logger('[MACHINE] -> meddle networks');
             networks.processed.meddle();    
         }
 
@@ -857,9 +1025,11 @@ async function saveCaptures(captures) {
     };
             
     const controller = Controller(monitoring);
-    const gate = Gate(config.gate, monitoring);
+    const gate = Gate2(config.gate, monitoring);
     const distance = Distance(config.distance, monitoring);
     const machine = Machine(config.machine, controller, monitoring);
+
+    await sleep(2000);
     
     robotjs.moveMouse(323, 251);
     
@@ -876,7 +1046,17 @@ async function saveCaptures(captures) {
     gate
         // .on('capture_match', (capture) => context.captures.gate.push(capture))
         // .on('capture_terminate', (capture) => context.captures.gate.push(capture))
-        .on('terminate', (target) => context.targets.push(target) )
+        .on('terminate', (target) => context.targets.push(target))
+        .on('reload', () => {
+            gate.stop();
+            distance.stop();
+            machine.stop();
+
+            monitoring.logger('{yellow-fg}##### GAME FRAME FREEZED | RELOADING #####{/yellow-fg}');
+            monitoring.logger('');
+            process.exit(1);
+        })
+        // .on('terminate', console.log )
         .start();
     
     distance
@@ -901,7 +1081,6 @@ async function saveCaptures(captures) {
             machine.scored();
         })
         .start(context.targets);
-    
 })()
 
 // ######################        /Execution          ######################
