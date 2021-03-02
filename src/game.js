@@ -141,24 +141,20 @@ const Monitoring = (address, port) => {
         logger: ((client) => (content) => {
             client({ type: MONITORING_TYPES.logger, data:content });
         })(monitoringClient),
-        stopwatch: ((client) => async (name, config, func) => {
+        stopwatch: ((client) => async (config, func) => {
             const start = process.hrtime.bigint();
     
             const resolve = await func();
 
             const end = process.hrtime.bigint();
-
-            const measure = Number(end - start); // nano seconds
-
-            if (!config.mute)
-                client({ type: config.type, data: converters.milliseconds(measure) });
             
-            //if (measure < config.max && resolve) {
-                if (resolve) resolve()
-            //} //else if (measure > config.max) { self().logger(`{red-fg}****** [WARNING][${config.type}] SKIP FRAME ${measure}/${config.max}{/red-fg}`) }
+            if (resolve) { resolve() }
+
+            if (config.active) { client({ type: config.type, data: converters.milliseconds(Number(end - start)) }) }
+
         })(monitoringClient),
-        distanceMetter: ((client) => (distance) => {
-            client({ type: MONITORING_TYPES.distanceMetter, data:distance })
+        distanceMetter: ((client) => (distance,  config) => {
+            if (config.active) { client({ type: MONITORING_TYPES.distanceMetter, data:distance }) }
         })(monitoringClient),
         // { current: string, lastScore: number, running: string, generations: number }
         stats: ((client) => (data) => {
@@ -177,145 +173,6 @@ const { EventEmitter } = require('events');
 
 // Sensors
 const Gate = (config, monitoring) => {
-    const context = {
-        emitter: new EventEmitter(),
-        interval: null,
-        state: {
-            match: false,
-            positions: [],
-            activate: { on: null, off: null },
-            width: 0
-        }
-    };
-    
-    function clearContext() {
-        context.interval = null;
-        context.state.match = false;
-        context.state.positions = [];
-        context.activate = { on: null, off: null };
-        context.state.width = 0;
-    }
-    
-    function computeState() {
-        context.state.positions.sort((a, b) =>  b-a);
-        
-        const origin = config.size.height - context.state.positions.shift(); 
-        const height = config.size.height - context.state.positions.pop() - origin;
-        const duration = context.state.activate.off - context.state.activate.on;
-        const width = captureWidth(origin, height);
-        
-        return ({ origin, height, width, speed: width/duration });
-    }
-    
-    function captureWidth(origin, height) {
-        const x = config.position.x - 70;
-        const y = config.position.y + config.size.height - origin - (height / 2);
-        const capture = Capture(x, y, 70, 1);
-
-        context.emitter.emit('capture_terminate', capture);
-        
-        let width = 0;
-        for (let i = 69; i >= 0; i--) {            
-            if(config.tracker.colors.includes(capture.colorAt(i, 0))) {
-                width++;
-            }
-        }
-        
-        return width;
-    }
-    
-    function initialize() {
-        context.state.match = true;
-        context.state.activate.on = Date.now();
-        
-        monitoring.logger(`[GATE] -> initialize`);
-        context.emitter.emit('initialize');
-    }
-    
-    function terminate() {
-        context.state.activate.off = Date.now();
-        
-        monitoring.logger(`[GATE] -> terminate`);
-        context.emitter.emit('terminate', computeState());
-        clearContext();
-    }
-    const self = () => Object.assign({}, {
-        'start': _start,
-        'stop': _stop,
-        'on': _on
-    });
-    
-    function _start() {
-        monitoring.logger(`[GATE] -> start`);
-        context.interval = setInterval(() => {
-            monitoring.stopwatch('Gate', config.monitoring.stopwatch, () => {
-                const capture = Capture(config.position.x, config.position.y, config.size.width, config.size.height);
-                
-                const heightCompressed = (config.size.height - 1) / config.compressor;
-                const widthCompressed = (config.size.width - 1) / config.compressor;
-                const trackers = 2;
-                
-                let localMatch = false;
-                for (let x = 0; x/config.compressor < widthCompressed; x++) {                       
-                    let topMatch = false;
-                    let bottomMatch = false;
-                    
-                    for (let y = 0; y/config.compressor < heightCompressed/trackers; y++) {
-                        MoveMouse(!!process.env.MOUSE_IGNORE_GATE)(capture.converters.absolute.x(x), capture.converters.absolute.y(y));
-                        MoveMouse(!!process.env.MOUSE_IGNORE_GATE)(capture.converters.absolute.x(x), capture.converters.absolute.y((config.size.height - 1) - y));
-                        
-                        const [top, bottom] = [
-                            topMatch ? null : config.tracker.colors.includes(capture.colorAt(x, y)), 
-                            bottomMatch ? null : config.tracker.colors.includes(capture.colorAt(x, (config.size.height - 1) - y))
-                        ];
-
-                        if (top || bottom) {
-                            if (top && !topMatch) topMatch = true;
-
-                            if (bottom && !bottomMatch) bottomMatch = true;
-
-                            localMatch = true;
-
-                            context.state.positions.push(top ? y : config.size.height - y);
-                            context.state.width++;                            
-                        }
-
-                        if (topMatch && bottomMatch) { break }
-                    }
-                }
-
-                if (localMatch) context.emitter.emit('capture_match', capture);
-
-                if (!context.state.match && localMatch) { return () => initialize() }
-                
-                if (context.state.match && !localMatch) { return () => terminate() }
-            })
-        }, config.frequency);
-
-        return self();
-    }
-    
-    function _stop() {
-        monitoring.logger(`[GATE] -> stop`);
-
-        clearInterval(context.interval);
-        clearContext();
-
-        return self();
-    }
-    
-    function _on(e, func) {
-        monitoring.logger(`[GATE] -> register on(${e})`);
-
-        context.emitter.on(e, func);
-        
-        return self();
-    }
-    
-    return self();
-};
-
-const Gate2 = (config, monitoring) => {
     const context = {
         emitter: new EventEmitter(),
         interval: null,
@@ -344,22 +201,14 @@ const Gate2 = (config, monitoring) => {
         
         return ({ origin, height, width, speed: width/duration });
     }
-    
-    function captureDetails() {
-        const maxWidth = 100;
 
-        const x = config.position.x - maxWidth;
-        const y = config.position.y;
-
-        const capture = Capture(x, y, maxWidth, config.size.height);
-
-        context.emitter.emit('capture_terminate', capture);
-
+    function scannerRectangle(capture, size) {
         const matches = { left: null, right: null, top: null, bottom: null};
+
         // capture width
-        for (let xLeft = 0; xLeft < maxWidth; xLeft++) {
-            const xRight = maxWidth - xLeft - 1;
-            for (let y = 0; y < config.size.height; y++) {
+        for (let xLeft = 0; xLeft < size.width; xLeft++) {
+            const xRight = size.width - xLeft - 1;
+            for (let y = 0; y < size.height; y++) {
                 const [left, right] = [
                     matches.left ? null : config.tracker.colors.includes(capture.colorAt(xLeft, y)), 
                     matches.right ? null : config.tracker.colors.includes(capture.colorAt(xRight, y))
@@ -376,9 +225,9 @@ const Gate2 = (config, monitoring) => {
         }
 
         // capture height
-        for (let yTop = 0; yTop < config.size.height; yTop++) {
-            const yBottom = config.size.height - yTop  - 1;
-            for (let x = 0; x < maxWidth; x++) {
+        for (let yTop = 0; yTop < size.height; yTop++) {
+            const yBottom = size.height - yTop  - 1;
+            for (let x = 0; x < size.width; x++) {
                 const [top, bottom] = [
                     matches.top ? null : config.tracker.colors.includes(capture.colorAt(x, yTop)), 
                     matches.bottom ? null : config.tracker.colors.includes(capture.colorAt(x, yBottom))
@@ -394,8 +243,55 @@ const Gate2 = (config, monitoring) => {
             if (null !== matches.top && null !== matches.bottom) { break }
         }
 
-        if ((!matches.top || !matches.bottom)) {
+        return matches;
+    }
+
+    function scannerSquare(capture, size) {
+        const matches = { left: null, right: null, top: null, bottom: null};
+
+        // capture width
+        for (let x = 0; x < size; x++) {
+            const xx = size - x - 1;
+            for (let y = 0; y < size; y++) {
+                const [left, right, top, bottom] = [
+                    matches.left ? null : config.tracker.colors.includes(capture.colorAt(x, y)), 
+                    matches.right ? null : config.tracker.colors.includes(capture.colorAt(xx, y)),
+                    matches.top ? null : config.tracker.colors.includes(capture.colorAt(y, x)), 
+                    matches.bottom ? null : config.tracker.colors.includes(capture.colorAt(y, xx))
+                ];
+            
+                if (left) { matches.left = x }
+
+                if (right) { matches.right = xx }
+
+                if (top) { matches.top = x }
+
+                if (bottom) { matches.bottom = xx }
+
+                if (null !== matches.left && null !== matches.right && null !== matches.top && null !== matches.bottom) { break }
+            }
+
+            if (null !== matches.left && null !== matches.right && null !== matches.top && null !== matches.bottom) { break }
+        }
+
+        return matches;
+    }
+    
+    function captureDetails() {
+        const maxWidth = 110;
+
+        const x = config.position.x - maxWidth;
+        const y = config.position.y;
+
+        const capture = Capture(x, y, maxWidth, config.size.height);
+
+        context.emitter.emit('capture_terminate', capture);
+
+        const matches = config.scanner.size.height / config.scanner.size.width === 1 ? scannerSquare(capture, config.scanner.size.height) : scannerRectangle(capture, config.scanner.size);
+
+        if ((!matches.top || !matches.bottom || !matches.left || !matches.right)) {
             monitoring.logger(`{red-fg}[GATE] -> [WARNING] missing target ....{/red-fg}`);
+            console.log('[WARNING] missing target');
             throw new Error('Frame missing')
         }
         
@@ -433,7 +329,7 @@ const Gate2 = (config, monitoring) => {
             if (context.state.locked) return;
 
             context.state.locked = true;
-            await monitoring.stopwatch('Gate', config.monitoring.stopwatch, () => {
+            await monitoring.stopwatch(config.monitoring.stopwatch, () => {
                 const capture = Capture(config.position.x, config.position.y, config.size.width, config.size.height);
                 const heightCompressed = (config.size.height - 1) / config.compressor;
                 const widthCompressed = (config.size.width - 1) / config.compressor;
@@ -548,7 +444,7 @@ const Distance = (config, monitoring) => {
         
         context.state.targets = targets;
         context.interval = setInterval(() => {
-            monitoring.stopwatch('Distance', config.monitoring.stopwatch, () => {
+            monitoring.stopwatch(config.monitoring.stopwatch, () => {
                 if (!context.state.current && (!context.state.targets.length)) return;
                 
                 if (!context.state.current) {
@@ -567,7 +463,7 @@ const Distance = (config, monitoring) => {
 
                 context.state.distance = parseCapture(capture);
                 
-                monitoring.distanceMetter(context.state.distance);
+                monitoring.distanceMetter(context.state.distance, config.monitoring.distanceMetter);
                 
                 if (!context.state.passthrough && 40 > context.state.distance) {
                     context.state.passthrough = true ;
@@ -903,9 +799,9 @@ const Machine = (config, controller, monitoring) => {
     function _initialize(rawInputs) {
         monitoring.logger(`[MACHINE] -> initialize`);
 
-        computeInputs(rawInputs);
+        computeInputs(Object.assign({}, rawInputs, { distance: null }));
 
-        monitoring.logger(`[MACHINE] -> inputs ${JSON.stringify(context.state.inputs)}`);
+        monitoring.logger(`[MACHINE] -> inputs {blue-fg}${JSON.stringify(context.state.inputs)}{/blue-fg}`);
     }
 
     function _scored() {
@@ -935,17 +831,20 @@ const configMonitoring = {
     gate: { 
         stopwatch: { 
             type: MONITORING_TYPES.stopwatch.gate,
-            mute: !!Number(process.env.GATE_STOPWATCH_MUTE),
-            max: converters.nanoseconds(Number(process.env.GATE_FREQUENCY)),
+            active: !!Number(process.env.GATE_STOPWATCH),
+            max: converters.nanoseconds(Number(process.env.GATE_STOPWATCH_MAX)),
             threshold: converters.nanoseconds(Number(process.env.GATE_FREQUENCY) * 0.7)
         }
     },
     distance: {
         stopwatch: {
             type: MONITORING_TYPES.stopwatch.distance,
-            mute: !!Number(process.env.DISTANCE_STOPWATCH_MUTE),
-            max: converters.nanoseconds(Number(process.env.DISTANCE_FREQUENCY)),
+            active: !!Number(process.env.DISTANCE_STOPWATCH),
+            max: converters.nanoseconds(Number(process.env.DISTANCE_STOPWATCH_MAX)),
             threshold: converters.nanoseconds(Number(process.env.DISTANCE_FREQUENCY) * 0.7)
+        },
+        distanceMetter: {
+            active: !!Number(process.env.DISTANCE_METTER),
         }
     },
     terminal: {},
@@ -960,7 +859,13 @@ const config = {
         position: GATE_POSITION,
         size: GATE_SIZE,
         tracker: { colors: process.env.TRACKING_COLORS.split(', ') },
-        monitoring: configMonitoring.gate
+        monitoring: configMonitoring.gate,
+        scanner: {
+            size: {
+                width: Number(process.env.GATE_SCANNER_SIZE_WIDTH),
+                height: Number(process.env.GATE_SCANNER_SIZE_HEIGHT),
+            }
+        }
     },
     distance: { 
         frequency: Number(process.env.DISTANCE_FREQUENCY),
@@ -1000,15 +905,17 @@ async function saveCaptures(captures) {
 
     const uniq = uuid.v4();
 
-    if (capturesGate.length) monitoring.logger(`##### GATE captures: ${__dirname}/captures/gate/${1000/Number(process.env.GATE_FREQUENCY)}FPS/${uniq}`)
+    if (capturesGate.length) monitoring.logger(`{white-fg}[CAPTURE][GATE]: start saving{/white-fg}`)
     for (const capture of capturesGate) {
         await saveCapture(capture.screen, `./captures/GATE/${1000/Number(process.env.GATE_FREQUENCY)}FPS/${uniq}`, 'rec-');
     }
+    if (capturesGate.length) monitoring.logger(`{green-fg}[CAPTURE][GATE]: success save ${__dirname}/captures/gate/${1000/Number(process.env.GATE_FREQUENCY)}FPS/${uniq}{/green-fg}`)
 
-    if (capturesDistance.length) monitoring.logger(`##### DISTANCE captures: ${__dirname}/captures/distance/${1000/Number(process.env.DISTANCE_FREQUENCY)}FPS/${uniq}`)
+    if (capturesDistance.length) monitoring.logger(`{white-fg}[CAPTURE][DISTANCE]: start saving{/white-fg}`)
     for (const capture of capturesDistance) {
         await saveCapture(capture.screen, `./captures/DISTANCE/${1000/Number(process.env.DISTANCE_FREQUENCY)}FPS/${uniq}`, 'rec-');
     }
+    if (capturesDistance.length) monitoring.logger(`{green-fg}[CAPTURE][DISTANCE]: success save ${__dirname}/captures/distance/${1000/Number(process.env.DISTANCE_FREQUENCY)}FPS/${uniq}{/green-fg}`)
 }
 
 // ######################        Execution          ######################
@@ -1025,7 +932,7 @@ async function saveCaptures(captures) {
     };
             
     const controller = Controller(monitoring);
-    const gate = Gate2(config.gate, monitoring);
+    const gate = Gate(config.gate, monitoring);
     const distance = Distance(config.distance, monitoring);
     const machine = Machine(config.machine, controller, monitoring);
 
@@ -1038,29 +945,27 @@ async function saveCaptures(captures) {
     robotjs.mouseClick('left');
     robotjs.keyTap('up');
     
-    monitoring.logger('##### GAME START #####');
+    monitoring.logger('{green-fg}##### GAME START #####{/green-fg}');
     
     machine
         .start();
 
     gate
-        // .on('capture_match', (capture) => context.captures.gate.push(capture))
-        // .on('capture_terminate', (capture) => context.captures.gate.push(capture))
+        .on('capture_match', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : context.captures.gate.push(capture))
+        .on('capture_terminate', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : context.captures.gate.push(capture))
         .on('terminate', (target) => context.targets.push(target))
-        .on('reload', () => {
-            gate.stop();
-            distance.stop();
-            machine.stop();
-
+        .on('reload', async () => {
             monitoring.logger('{yellow-fg}##### GAME FRAME FREEZED | RELOADING #####{/yellow-fg}');
             monitoring.logger('');
+
+            await require('util').promisify(setTimeout)(500);
+
             process.exit(1);
         })
-        // .on('terminate', console.log )
         .start();
     
     distance
-        // .on('capture', (capture) => context.captures.distance.push(capture))
+        .on('capture', (capture) => !(Number(process.env.DISTANCE_CAPTURE)) ? null : context.captures.distance.push(capture))
         .on('initialize', (target) => machine.initialize(target) )
         .on('distance', (distance) => machine.play({ distance }) )
         .on('timeout', async () => {
@@ -1068,12 +973,13 @@ async function saveCaptures(captures) {
             distance.stop();
             machine.stop();
     
+            
+            monitoring.logger('{red-fg}##### GAME OVER #####{/red-fg}');
+            monitoring.logger('');
+
             await saveCaptures(context.captures);
     
-            monitoring.logger('##### GAME OVER #####');
-            monitoring.logger('');
-    
-            await sleep(2000);
+            await require('util').promisify(setTimeout)(3000);
     
             process.exit(1);
         })

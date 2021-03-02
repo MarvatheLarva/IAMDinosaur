@@ -33,7 +33,7 @@ function Logger(layout) {
         mouse: true,
         scrollable: true,
         tags: true,
-        fg: "green",
+        fg: "gray",
         selectedFg: "green",
         border: { type: "line", fg: "yellow" },
         scrollback: 1000
@@ -194,8 +194,8 @@ screen.key('s', async function() {
 // components
 const logger = Logger(layoutRight);
 const top10 = BestNetworks(layoutRight)
-const gateStopwatch = Stopwatch(layoutLeft, { label: 'Gate', max: Number(process.env.GATE_FREQUENCY), threshold: Number(process.env.GATE_FREQUENCY) * 0.7 });
-const distanceStopwatch = Stopwatch(layoutLeft, { label: 'Distance', max: Number(process.env.DISTANCE_FREQUENCY), threshold: Number(process.env.DISTANCE_FREQUENCY) * 0.7 });
+const gateStopwatch = Stopwatch(layoutLeft, { label: 'Gate', max: Number(process.env.GATE_STOPWATCH_MAX), threshold: Number(process.env.GATE_STOPWATCH_MAX) * 0.7 });
+const distanceStopwatch = Stopwatch(layoutLeft, { label: 'Distance', max: Number(process.env.DISTANCE_STOPWATCH_MAX), threshold: Number(process.env.DISTANCE_STOPWATCH_MAX) * 0.7 });
 const distanceMetter = DistanceMetter(layoutLeft, { max: Number(process.env.DISTANCE_SIZE_WIDTH) });
 const stats = Stats(layoutLeft);
 
