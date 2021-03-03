@@ -1,33 +1,38 @@
-require('dotenv').config();
-
 const blessed = require('blessed');
 const contrib = require('blessed-contrib');
 
-const screen = blessed.screen({ fastCSR: true });
+exports.PROBE = {
+    stopwatch: { gate: 'stopwatch.gate', distance: 'stopwatch.distance'},
+    logger: 'logger',
+    distanceMetter: 'distance-metter',
+    stats: 'stats',
+    top10: 'top10'
+};
 
-const layoutLeft = blessed.layout({
-    bottom: 0,
-    parent: screen,
-    width: Number(process.env.MONITORING_LAYOUT_LEFT),
-    height: 30,
-    bg: 'green',
-    border: { type: 'line', fg: 'white'}
-});
+exports.Activity = function Activity(layout) {
+    const component = blessed.element({
+        width: 10,
+        height: 1,
+        right: 0,
+        content: 'INACTIVE'
+    });
 
-const layoutRight = blessed.layout({
-    right: 0,
-    parent: screen,
-    width: Number(process.env.MONITORING_LAYOUT_RIGHT),
-    height: 50,
-    bg: 'red',
-    border: { type: 'line', fg: 'white'}
-});
+    function update(data) {
+        component.setText(data ? 'ACTIVE' : 'INACTIVE');
+        component.render();
+    }
 
-function Logger(layout) {
+    return {
+        component,
+        update
+    }
+}
+
+exports.Logger = function Logger(layout) {
     const component = blessed.log({ 
         label: ' Logger ',
         width: layout.width - 2,
-        height: 34,
+        height: 18,
         keys: true,
         vi: true,
         mouse: true,
@@ -50,7 +55,7 @@ function Logger(layout) {
 }
 
 // options { label: string, max: number, threshold: number }
-function Stopwatch(layout, options) {
+exports.Stopwatch = function Stopwatch(layout, options) {
     const component = contrib.line({
         label: ` Stopwatch / ${options.label} - Maximum [${options.max} ms] - Threshold [${options.threshold} ms] `, 
         width: layout.width - 2,
@@ -75,13 +80,9 @@ function Stopwatch(layout, options) {
 
     function computeColor(value) {
         const overload = options.max - ((options.max - options.threshold) / 2);
-        if (overload < value) {
-            return  'red';
-        }
-
-        if ((options.threshold) < value) {
-            return 'yellow'
-        }
+        
+        if (overload < value) { return  'red' }
+        if ((options.threshold) < value) { return 'yellow' }
 
         return 'green';
     }
@@ -105,7 +106,7 @@ function Stopwatch(layout, options) {
 }
 
 // [["SCORE", "NETWORK_ID", "DATE"], ...]
-function BestNetworks(layout) {
+exports.BestNetworks = function BestNetworks(layout) {
     const component = contrib.table({
         label: ' top 10 networks ',
         interactive: false,
@@ -131,7 +132,7 @@ function BestNetworks(layout) {
 }
 
 // options { max: number }
-function DistanceMetter(layout, options) {
+exports.DistanceMetter = function DistanceMetter(layout, options) {
     const component = contrib.gauge({ 
         label: ' Distance Metter ',
         width: layout.width - 2,
@@ -151,8 +152,9 @@ function DistanceMetter(layout, options) {
     }
 }
 
+
 // update data { current: string, lastScore: number, running: string, iteration: number }
-function Stats(layout) {
+exports.Stats = function Stats(layout) {
     const component = blessed.text({
         label: ' Stats ',
         fg: 'white',
@@ -180,78 +182,60 @@ iteration:          ${ data.iterations }\n\
     }
 }
 
-screen.key('q', async function() {
-    require('child_process').exec('yarn stop');
-    await require('util').promisify(setTimeout)(2000);
-    process.exit(0);
-});
+exports.History = function History(layout, options) {
+    const context = {
+        state: {
+            round: 0,
+            score: 0
+        }
+    };
 
-screen.key('s', async function() {
-    await require('util').promisify(setTimeout)(2000);
-    require('child_process').exec('yarn start');
-});
+    const component = contrib.line({
+        label: ` History `, 
+        width: layout.width - 2,
+        height: 15,
+        border: { type: 'line', fg: 'blue'},
+        showNthLabel: 12,
+        // maxY: 1000,
+        showLegend: false, 
+        //legend: { width: 20 }
+    });
 
-// components
-const logger = Logger(layoutRight);
-const top10 = BestNetworks(layoutRight)
-const gateStopwatch = Stopwatch(layoutLeft, { label: 'Gate', max: Number(process.env.GATE_STOPWATCH_MAX), threshold: Number(process.env.GATE_STOPWATCH_MAX) * 0.7 });
-const distanceStopwatch = Stopwatch(layoutLeft, { label: 'Distance', max: Number(process.env.DISTANCE_STOPWATCH_MAX), threshold: Number(process.env.DISTANCE_STOPWATCH_MAX) * 0.7 });
-const distanceMetter = DistanceMetter(layoutLeft, { max: Number(process.env.DISTANCE_SIZE_WIDTH) });
-const stats = Stats(layoutLeft);
+    const scores = [];
+    const iterations = [];
 
-layoutLeft.append(distanceMetter.component)
-layoutLeft.append(distanceStopwatch.component);
-layoutLeft.append(gateStopwatch.component);
-layoutLeft.append(stats.component);
-
-layoutRight.append(logger.component);
-layoutRight.append(top10.component);
-
-screen.render();
-
-const udp = require('dgram');
-
-const PORT = 2222;
-
-const server = udp.createSocket('udp4');
-
-server
-  .on('error', handleError(server))
-  .on('message', handleMessage(server))
-  .on('close', handleClose(server))
-  .bind(PORT);
-
-function handleClose(server) { return () => {
-  process.exit();
-}}
-
-function handleError(server) { return (error) => {
-  console.log('Error: ' + error);
-  server.close();
-}}
-
-function handleMessage(server) { return (msg, info) => {
-    const payload = JSON.parse(msg.toString());
-    switch (payload.type) {
-        case 'stopwatch.gate':
-            gateStopwatch.update(payload.data)
-            break;
-        case 'stopwatch.distance':
-            distanceStopwatch.update(payload.data)
-            break;
-        case 'distance-metter':
-            distanceMetter.update(payload.data)
-            break;
-        case 'logger':
-            logger.update(payload.data)
-            break;
-        case 'stats':
-            stats.update(payload.data)
-            break;
-        case 'top10':
-            top10.update(payload.data)
-            break;
+    function setData(score, values, color) {
+        return Object.assign({}, {
+            title: score,
+            style: { line: color, text: color },
+            x: [...scores.keys()].map(e => 'iteration'),
+            y: values
+        })
     }
 
-  screen.render();
-}}
+    function update(score) {
+        if (score === undefined) { return }
+        context.state.round++;
+        if (scores.length > 1200)
+            scores.shift();
+        scores.push(score);
+
+        if (context.state.round && context.state.round % 12 === 0) {
+            const scoreIteration = scores.slice(-12).sort((a, b) => b - a)[0];
+            if (iterations.length > 1200)
+                iterations.shift();
+            iterations.push(scoreIteration)
+            context.state.score = scoreIteration;
+        } else { iterations.push(context.state.score) }
+        
+        component.setData([
+            setData(`current ${score}`, scores, 'white'),
+            setData(`best ${context.state.score}`, iterations, 'green')
+        ]);
+    }
+    
+    return {
+        component,
+        update
+    }
+}
