@@ -5,18 +5,26 @@ exports.Distance = function(config, controller, monitoring) {
         emitter: new EventEmitter(),
         interval: null,
         timeout: null,
+        locked: false,
         state: {
             targets: null,
             current: null,
             distance: null,
             passthrough: false,
-            locked: false
         }
     };
 
     function clearContext() {
+        clearTimeout(context.timeout);
+        clearInterval(context.interval);
+
         context.interval = null;
         context.timeout = null;
+        context.locked = false;
+        context.start = false;
+    }
+
+    function clearState() {
         context.state.targets = null;
         context.state.current = null;
         context.state.distance = null;
@@ -45,7 +53,7 @@ exports.Distance = function(config, controller, monitoring) {
         clearTimeout(context.timeout);
         context.timeout = setTimeout(() => {
             monitoring.logger(`[DISTANCE] -> timeout`);
-            if (context.state.active) { context.emitter.emit('timeout') }
+            if (context.start) { context.emitter.emit('timeout') }
         }, config.timeout);
     }
 
@@ -56,18 +64,18 @@ exports.Distance = function(config, controller, monitoring) {
     });
 
     function _start(targets) {
-        if (context.state.active) { return }
-        context.state.active = true;
+        if (context.start) { return }
+        context.start = true;
 
         monitoring.logger(`[DISTANCE] -> start`);
         
         context.state.targets = targets;
         context.interval = setInterval(async () => {
-            if (context.state.locked) return;
+            if (context.locked) { return }
 
-            context.state.locked = true;
+            context.locked = true;
             await monitoring.stopwatch(config.monitoring.stopwatch, () => {
-                if (!context.state.current && (!context.state.targets.length)) return;
+                if (!context.state.current && (!context.state.targets.length)) { return }
                 
                 if (!context.state.current) {
                     context.state.current = context.state.targets.shift();
@@ -75,7 +83,8 @@ exports.Distance = function(config, controller, monitoring) {
                     monitoring.logger(`[DISTANCE] -> initialize`);
 
                     initTimeout();
-                    return () => context.emitter.emit('initialize', context.state.current);
+
+                    return context.emitter.emit('initialize', context.state.current);
                 }
                 
                 const capture = controller.capture(config.position.x, config.position.y - (context.state.current.height / 2 + context.state.current.origin) - (config.size.height * 4), config.size.width, config.size.height);
@@ -83,40 +92,40 @@ exports.Distance = function(config, controller, monitoring) {
                 context.emitter.emit('capture', capture);
 
                 const distance = parseCapture(capture);
-                if (distance !== context.state.distance) {
-                    context.state.distance = distance;
+                if (distance === context.state.distance) { return }
+                
+                context.state.distance = distance;
+                
+                monitoring.distanceMetter(context.state.distance, config.monitoring.distanceMetter);
+                
+                if (!context.state.passthrough && 40 > context.state.distance) {
+                    context.state.passthrough = true ;
                     
-                    monitoring.distanceMetter(context.state.distance, config.monitoring.distanceMetter);
+                    return context.emitter.emit('distance', context.state.distance);
+                } else if (context.state.passthrough && context.state.distance > 50) {
+                    context.state.passthrough = false;
+                    context.state.current = null;
                     
-                    if (!context.state.passthrough && 40 > context.state.distance) {
-                        context.state.passthrough = true ;
-                        
-                        return () => context.emitter.emit('distance', context.state.distance);
-                    } else if (context.state.passthrough && context.state.distance > 50) {
-                        context.state.passthrough = false;
-                        context.state.current = null;
-                        
-                        monitoring.logger('[DISTANCE] -> scored');
-                        
-                        return () => context.emitter.emit('scored');
-                    } else if (!context.state.passthrough) {
-                        if (context.state.distance > 260) return;
-                        
-                        return () => context.emitter.emit('distance', context.state.distance);
-                    }
+                    monitoring.logger('[DISTANCE] -> scored');
+                    
+                    return context.emitter.emit('scored');
+                } else if (!context.state.passthrough) {
+                    if (context.state.distance > 260) { return }
+                    
+                    return context.emitter.emit('distance', context.state.distance);
                 }
             });
-            context.state.locked = false;
+            context.locked = false;
         }, config.frequency);
 
         return self();
     }
 
     function _stop() {
-        context.state.active = false;
-        clearTimeout(context.timeout);
-        clearInterval(context.interval);
+        context.start = false;
+
         clearContext();
+        clearState();
 
         monitoring.logger(`[DISTANCE] -> stop`);
 

@@ -4,21 +4,28 @@ exports.Gate = function (config, controller, monitoring) {
     const context = {
         emitter: new EventEmitter(),
         interval: null,
+        start: false,
+        locked: false,
         state: {
             match: false,
             positions: [],
             activate: { on: null, off: null },
             width: 0,
-            locked: false,
-            start: false
         }
     };
     
     function clearContext() {
+        clearInterval(context.interval);
+
         context.interval = null;
+        context.start = false;
+        context.locked = false;
+    }
+    
+    function clearState() {
         context.state.match = false;
         context.state.positions = [];
-        context.activate = { on: null, off: null };
+        context.state.activate = { on: null, off: null };
         context.state.width = 0;
     }
     
@@ -29,6 +36,41 @@ exports.Gate = function (config, controller, monitoring) {
         const { width, height, origin } = captureDetails();
         
         return ({ origin, height, width, speed: width/duration });
+    }
+  
+    function captureDetails() {
+        const maxWidth = 110;
+
+        const x = config.position.x - maxWidth;
+        const y = config.position.y;
+
+        const capture = controller.capture(x, y, maxWidth, config.size.height);
+
+        context.emitter.emit('capture_terminate', capture);
+
+        const matches = config.scanner.size.height / config.scanner.size.width === 1 ? scannerSquare(capture, config.scanner.size.height) : scannerRectangle(capture, config.scanner.size);
+
+        if ((!matches.top || !matches.bottom || !matches.left || !matches.right)) {
+            monitoring.logger(`{red-bg}[GATE] -> [WARNING] missing target ....{/red-bg}`);
+            monitoring.logger(`{red-fg}[GATE] -> [WARNING] ${JSON.stringify(matches)}{/red-fg}`);
+
+            emitter.emit('warning', capture);
+
+            console.log('WARNING MISSING TARGET', matches);
+
+            throw new Error();
+        }
+
+        const width = matches.right - matches.left;
+        const height = matches.bottom - matches.top;
+        const origin = config.size.height - matches.bottom - 1;
+
+        if (height > 50 || width > 90) {
+            monitoring.logger(`{yellow-bg}[GATE] -> WARNING matches suspect value{/yellow-bg}`);
+            emitter.emit('warning', capture);
+        }
+        
+        return { width, height, origin };
     }
 
     function scannerRectangle(capture, size) {
@@ -105,42 +147,7 @@ exports.Gate = function (config, controller, monitoring) {
 
         return matches;
     }
-    
-    function captureDetails() {
-        const maxWidth = 110;
-
-        const x = config.position.x - maxWidth;
-        const y = config.position.y;
-
-        const capture = controller.capture(x, y, maxWidth, config.size.height);
-
-        context.emitter.emit('capture_terminate', capture);
-
-        const matches = config.scanner.size.height / config.scanner.size.width === 1 ? scannerSquare(capture, config.scanner.size.height) : scannerRectangle(capture, config.scanner.size);
-
-        if ((!matches.top || !matches.bottom || !matches.left || !matches.right)) {
-            monitoring.logger(`{red-bg}[GATE] -> [WARNING] missing target ....{/red-bg}`);
-            monitoring.logger(`{red-fg}[GATE] -> [WARNING] ${JSON.stringify(matches)}{/red-fg}`);
-
-            emitter.emit('warning', capture);
-
-            console.log('WARNING MISSING TARGET', matches);
-
-            throw new Error();
-        }
-
-        const width = matches.right - matches.left;
-        const height = matches.bottom - matches.top;
-        const origin = config.size.height - matches.bottom - 1;
-
-        if (height > 50 || width > 90) {
-            monitoring.logger(`{yellow-bg}[GATE] -> WARNING matches suspect value{/yellow-bg}`);
-            emitter.emit('warning', capture);
-        }
-        
-        return { width, height, origin };
-    }
-    
+   
     function initialize() {
         context.state.match = true;
         context.state.activate.on = Date.now();
@@ -152,13 +159,14 @@ exports.Gate = function (config, controller, monitoring) {
     function terminate() {
         context.state.activate.off = Date.now();
         
-        monitoring.logger(`[GATE] -> terminate`);
         try {
             context.emitter.emit('terminate', computeState());
+            monitoring.logger(`[GATE] -> terminate`);
         } catch (e) {
             context.emitter.emit('reload');
         }
-        clearContext();
+
+        clearState();
     }
     const self = () => Object.assign({}, {
         'start': _start,
@@ -167,11 +175,14 @@ exports.Gate = function (config, controller, monitoring) {
     });
     
     function _start() {
-        context.state.start = true;
+        if (context.start) { return }
+        
         monitoring.logger(`[GATE] -> start`);
+        context.start = true;
         context.interval = setInterval(async () => {
-            if (!context.state.start || context.state.locked) return;
-            context.state.locked = true;
+            if (context.locked) { return }
+
+            context.locked = true;
             await monitoring.stopwatch(config.monitoring.stopwatch, () => {
                 const capture = controller.capture(config.position.x, config.position.y, config.size.width, config.size.height);
                 const heightCompressed = (config.size.height - 1) / config.compressor;
@@ -198,15 +209,14 @@ exports.Gate = function (config, controller, monitoring) {
                     }
                     if (localMatch) { break }
                 }
-
                 
-                if (localMatch) context.emitter.emit('capture_match', capture);
+                if (localMatch) { context.emitter.emit('capture_match', capture) }
                 
-                if (!context.state.match && localMatch) { return () => initialize() }
+                if (!context.state.match && localMatch) { return initialize() }
                 
-                if (context.state.match && !localMatch) { return () => terminate() }
+                if (context.state.match && !localMatch) { return terminate() }
             });
-            context.state.locked = false;
+            context.locked = false;
         }, config.frequency);
 
         return self();
@@ -216,8 +226,8 @@ exports.Gate = function (config, controller, monitoring) {
         monitoring.logger(`[GATE] -> stop`);
         context.state.start = false;
 
-        clearInterval(context.interval);
         clearContext();
+        clearState();
 
         return self();
     }

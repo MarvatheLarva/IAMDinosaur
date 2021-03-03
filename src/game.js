@@ -6,17 +6,7 @@ const { Machine } = require('./machine');
 const { Controller } = require('./robot');
 const { saveCaptures, converters } = require('./utils');
 
-// ######################        Globals          ######################
-
-const GATE_SIZE = { width: Number(process.env.GATE_SIZE_WIDTH), height: Number(process.env.GATE_SIZE_HEIGHT) };
-const GATE_POSITION = { x: Number(process.env.GATE_POSITION_X), y: Number(process.env.GATE_POSITION_Y) };
-
-const DISTANCE_POSITION = { x: Number(process.env.DISTANCE_POSITION_X), y: Number(process.env.DISTANCE_POSITION_Y) };
-const DISTANCE_SIZE = { width: Number(process.env.DISTANCE_SIZE_WIDTH), height: Number(process.env.DISTANCE_SIZE_HEIGHT) };
-
-const MACHINE_NETWORK_LOCATION = __dirname + '/../machine';
-
-// ######################        /Globals          ######################
+const sleep = require('util').promisify(setTimeout)
 
 // ######################        Config          ######################
 
@@ -52,8 +42,8 @@ const config = {
     gate: {
         frequency: Number(process.env.GATE_FREQUENCY),
         compressor: Number(process.env.GATE_COMPRESSOR),
-        position: GATE_POSITION,
-        size: GATE_SIZE,
+        position: { x: Number(process.env.GATE_POSITION_X), y: Number(process.env.GATE_POSITION_Y) },
+        size: { width: Number(process.env.GATE_SIZE_WIDTH), height: Number(process.env.GATE_SIZE_HEIGHT) },
         tracker: { colors: process.env.TRACKING_COLORS.split(', ') },
         monitoring: configMonitoring.gate,
         scanner: {
@@ -68,14 +58,15 @@ const config = {
         frequency: Number(process.env.DISTANCE_FREQUENCY),
         compressor: Number(process.env.DISTANCE_COMPRESSOR),
         timeout: Number(process.env.DISTANCE_TIMEOUT),
-        position: DISTANCE_POSITION, size: DISTANCE_SIZE,
+        position: { x: Number(process.env.DISTANCE_POSITION_X), y: Number(process.env.DISTANCE_POSITION_Y) },
+        size: { width: Number(process.env.DISTANCE_SIZE_WIDTH), height: Number(process.env.DISTANCE_SIZE_HEIGHT) },
         tracker: { colors: process.env.TRACKING_COLORS.split(', ') },
         monitoring: configMonitoring.distance,
         controller: { mouse: Number(process.env.GATE_MOUSE) }
     },
     machine: { 
         network: { 
-            location: MACHINE_NETWORK_LOCATION,
+            location: __dirname + '/../machine',
             generations: Number(process.env.MACHINE_NETWORK_GENERATIONS),
             input: Number(process.env.MACHINE_NETWORK_INPUT),
             layer: Number(process.env.MACHINE_NETWORK_LAYER),
@@ -96,14 +87,12 @@ const config = {
 
 // ######################        Execution          ######################
 
-async function execution() {
-    const sleep = require('util').promisify(setTimeout);
-    
+async function execution(config) {  
     const context = { 
         targets: [],
         captures: {
-            gate: [...Array(100).keys()].map(e => null),
-            distance: [...Array(100).keys()].map(e => null),
+            gate: [],
+            distance: [],
             warning: []
         }
     };
@@ -129,8 +118,8 @@ async function execution() {
         .start();
 
     gate
-        .on('capture_match', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : (context.captures.gate.push(capture) && context.captures.gate.shift()))
-        .on('capture_terminate', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : (context.captures.gate.push(capture) && context.captures.gate.shift()))
+        .on('capture_match', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : context.captures.gate.push(capture))
+        .on('capture_terminate', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : context.captures.gate.push(capture))
         .on('terminate', (target) => context.targets.push(target))
         .on('warning', (capture) => {context.capture.warning.push(capture)})
         .on('reload', async () => {
@@ -152,7 +141,7 @@ async function execution() {
         .start();
     
     distance
-        .on('capture', (capture) => !(Number(process.env.DISTANCE_CAPTURE)) ? null : (context.captures.distance.push(capture) && context.captures.distance.shift()))
+        .on('capture', (capture) => !(Number(process.env.DISTANCE_CAPTURE)) ? null : context.captures.distance.push(capture))
         .on('initialize', (target) => machine.initialize(target) )
         .on('distance', (distance) => machine.play({ distance }) )
         .on('timeout', async () => {
@@ -177,6 +166,6 @@ async function execution() {
         .start(context.targets);
 }
 
-execution();
+execution(config);
 
 // ######################        /Execution          ######################
