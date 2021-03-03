@@ -116,7 +116,7 @@ async function execution() {
 
     await sleep(2000);
     
-    controller.moveMouse(323, 251);
+    controller.moveMouse(Number(process.env.GAME_POSITION_X), Number(process.env.GAME_POSITION_Y));
     
     await sleep(100);
 
@@ -164,8 +164,8 @@ async function execution() {
             monitoring.logger('');
 
             await saveCaptures(context.captures.warning, 'WARNING', `${__dirname}/../captures/warning/`, monitoring);
-            // await saveCaptures(context.captures.gate, 'GATE', `${__dirname}/../captures/gate/`, monitoring);
-            // await saveCaptures(context.captures.distance, 'DISTANCE', `${__dirname}/../captures/distance/`, monitoring);
+            await saveCaptures(context.captures.gate, 'GATE', `${__dirname}/../captures/gate/`, monitoring);
+            await saveCaptures(context.captures.distance, 'DISTANCE', `${__dirname}/../captures/distance/`, monitoring);
 
             await require('util').promisify(setTimeout)(3000);
 
