@@ -1,8 +1,7 @@
 require('dotenv').config();
 
 const blessed = require('blessed');
-const { exec } = require('child_process');
-const sleep = require('util').promisify(setTimeout);
+const contrib = require('blessed-contrib');
 
 const { Activity, Logger, Stopwatch, BestNetworks, DistanceMetter, Stats, History } = require('./probe');
 
@@ -10,88 +9,88 @@ exports.Terminal = function() {
     const context = {
         state: {
             active: false
-        },
-        screen: blessed.screen({ fastCSR: true }),
-        layoutLeft: blessed.layout({
-            bottom: 0,
-            parent: context.screen,
-            width: Number(process.env.MONITORING_LAYOUT_LEFT),
-            height: 30,
-            bg: 'green',
-            border: { type: 'line', fg: 'white'}
-        }),
-        layoutRight: blessed.layout({
-            right: 0,
-            parent: context.screen,
-            width: Number(process.env.MONITORING_LAYOUT_RIGHT),
-            height: 50,
-            bg: 'yellow',
-            border: { type: 'line', fg: 'white'}
-        })
+        }
     }
 
-    // components
-    const activity = Activity(context.layoutRight);
-    const logger = Logger(context.layoutRight);
-    const top10 = BestNetworks(context.layoutRight);
-    const history = History(context.layoutRight);
-    const stats = Stats(context.layoutLeft);
+    const screen = blessed.screen({ fastCSR: true });
 
-    const gateStopwatch = Stopwatch(context.layoutLeft, {
+    const layoutLeft = blessed.layout({
+        bottom: 0,
+        parent: screen,
+        width: Number(process.env.MONITORING_LAYOUT_LEFT),
+        height: 30,
+        bg: 'green',
+        border: { type: 'line', fg: 'white'}
+    });
+
+    const layoutRight = blessed.layout({
+        right: 0,
+        parent: screen,
+        width: Number(process.env.MONITORING_LAYOUT_RIGHT),
+        height: 50,
+        bg: 'yellow',
+        border: { type: 'line', fg: 'white'}
+    });
+
+    // components
+    const activity = Activity(layoutRight);
+
+    const logger = Logger(layoutRight);
+    
+    const top10 = BestNetworks(layoutRight);
+
+    const history = History(layoutRight);
+    
+    const gateStopwatch = Stopwatch(layoutLeft, {
         label: 'Gate',
         max: Number(process.env.GATE_STOPWATCH_MAX),
         threshold: Number(process.env.GATE_STOPWATCH_MAX) * 0.7
     });
     
-    const distanceStopwatch = Stopwatch(context.layoutLeft, {
+    const distanceStopwatch = Stopwatch(layoutLeft, {
         label: 'Distance',
         max: Number(process.env.DISTANCE_STOPWATCH_MAX),
         threshold: Number(process.env.DISTANCE_STOPWATCH_MAX) * 0.7
     });
 
-    const distanceMetter = DistanceMetter(context.layoutLeft, {
+    const distanceMetter = DistanceMetter(layoutLeft, {
         max: Number(process.env.DISTANCE_SIZE_WIDTH)
     });
     
-    context.layoutLeft.append(distanceMetter.component)
-    context.layoutLeft.append(distanceStopwatch.component);
-    context.layoutLeft.append(gateStopwatch.component);
-    context.layoutLeft.append(stats.component);
+    const stats = Stats(layoutLeft);
 
-    context.layoutRight.append(activity.component)
-    context.layoutRight.append(logger.component);
-    context.layoutRight.append(history.component);
-    context.layoutRight.append(top10.component);
+    layoutLeft.append(distanceMetter.component)
+    layoutLeft.append(distanceStopwatch.component);
+    layoutLeft.append(gateStopwatch.component);
+    layoutLeft.append(stats.component);
 
-    context.screen.render();
+    layoutRight.append(activity.component)
+    layoutRight.append(logger.component);
+    layoutRight.append(history.component);
+    layoutRight.append(top10.component);
 
-    context.screen.key('q', async function() {
-        exec('yarn stop');
-        
-        await sleep(2000);
+    screen.render();
 
+    screen.key('q', async function() {
+        require('child_process').exec('yarn stop');
+        await require('util').promisify(setTimeout)(2000);
         process.exit(0);
     });
 
-    context.screen.key('s', async function() {
+    screen.key('s', async function() {
         if (!context.state.active) {
             context.state.active = true;
-            context.layoutRight.style.bg = "green";
+            layoutRight.style.bg = "green";
             activity.update(true);
-            
-            await sleep(2000);
-            
-            exec('yarn start');
-            
-            context.screen.render();
+            await require('util').promisify(setTimeout)(2000);
+            require('child_process').exec('yarn start');
+            screen.render();
         } else {
             context.state.active = false;
-            context.layoutRight.style.bg = "yellow";
+            layoutRight.style.bg = "yellow";
             activity.update(false);
-
-            exec('yarn stop');
-            
-            context.screen.render();
+            require('child_process').exec('yarn stop');
+            screen.render();
         }
     });
 
@@ -119,7 +118,7 @@ exports.Terminal = function() {
                     break;
             }
         
-          context.screen.render();
+          screen.render();
         }
     }
 }

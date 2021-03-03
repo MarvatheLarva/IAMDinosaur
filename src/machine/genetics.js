@@ -2,12 +2,12 @@ exports.Genetics = function(config, monitoring) {
     function crossOver(netA, netB) {
         monitoring.logger(`[MACHINE][genetics] -> crossOver`);
 
-        // Swap (50% prob.)
-        if (Math.random() > 0.5) {
-            var tmp = netA;
-            netA = netB;
-            netB = tmp;
-        }
+        // // Swap (50% prob.)
+        // if (Math.random() > 0.5) {
+        //     var tmp = netA;
+        //     netA = netB;
+        //     netB = tmp;
+        // }
         
         // Cross over data keys
         crossOverDataKey(netA.neurons, netB.neurons, 'bias');
@@ -41,9 +41,7 @@ exports.Genetics = function(config, monitoring) {
     function mutateDataKeys(a, key, mutationRate) {
         for (var k = 0; k < a.length; k++) {
             // Should mutate?
-            if (Math.random() > mutationRate) {
-            continue;
-            }
+            if (Math.random() > mutationRate) { continue }
         
             a[k][key] += a[k][key] * (Math.random() - 0.5) * 3 + (Math.random() - 0.5);
         }
