@@ -4,13 +4,14 @@
     "blessed-contrib": "^4.8.21",
     "colors": "^1.4.0",
     "dotenv": "^8.2.0",
+    "pm2": "^4.5.5",
     "robotjs": "^0.6.0",
     "synaptic": "^1.1.4",
     "uuid": "^8.3.2"
   },
   "scripts": {
-    "start": "pm2 start ./src/game.js",
-    "stop": "pm2 stop ./src/game.js",
-    "monitoring": "node ./src/monitoring.js"
+    "start": "./node_modules/.bin/pm2 start ./src/game.js",
+    "stop": "./node_modules/.bin/pm2 stop ./src/game.js",
+    "monitoring": "node ./src/server.js"
   }
 }
