@@ -1,3 +1,4 @@
+## WORK IN PROGRESS
 ## rewrite inspired by [ivanseidel/IAMDinosaur](https://github.com/ivanseidel/IAMDinosaur)
 
 # Machine learning based on chrome://dino
