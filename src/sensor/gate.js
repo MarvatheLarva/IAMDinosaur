@@ -54,9 +54,7 @@ exports.Gate = function (config, controller, monitoring) {
             monitoring.logger(`{red-bg}[GATE] -> [WARNING] missing target ....{/red-bg}`);
             monitoring.logger(`{red-fg}[GATE] -> [WARNING] ${JSON.stringify(matches)}{/red-fg}`);
 
-            emitter.emit('warning', capture);
-
-            console.log('WARNING MISSING TARGET', matches);
+            emitter.emit('capture_warning', capture);
 
             throw new Error();
         }
@@ -67,7 +65,7 @@ exports.Gate = function (config, controller, monitoring) {
 
         if (height > 50 || width > 90) {
             monitoring.logger(`{yellow-bg}[GATE] -> WARNING matches suspect value{/yellow-bg}`);
-            emitter.emit('warning', capture);
+            emitter.emit('capture_warning', capture);
         }
         
         return { width, height, origin };

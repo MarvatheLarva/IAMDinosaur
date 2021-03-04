@@ -17,8 +17,6 @@ async function saveCapture(capture, path) {
 
 async function saveCaptures(captures, name, path, monitoring) {
     const uniq = uuid.v4();
-    if (captures.length) { console.log(uniq) }
-
     if (captures.length) { monitoring.logger(`{white-fg}[CAPTURE][${name}]: start saving{/white-fg}`) }
     for (const capture of captures) {
         if  (capture) { await saveCapture(capture.screen, `${path}/${uniq}`) }

@@ -7,6 +7,7 @@ exports.Machine = function (config, controller, monitoring) {
     const context = {
         network: null,
         location: null,
+        start: false,
         state: {
             on: null,
             off: null,
@@ -66,6 +67,10 @@ exports.Machine = function (config, controller, monitoring) {
     function _start() {
         monitoring.logger(`[MACHINE] -> start`);
 
+        if (context.start) { return }
+
+        context.start = true;
+
         if (networks.process.isEmpty()) { networks.process.initialize() }
 
         monitore()
@@ -78,6 +83,7 @@ exports.Machine = function (config, controller, monitoring) {
     }
 
     function _stop() {
+        context.start = false;
         context.state.off = Date.now();
         // context.state.score = Math.trunc(Math.max(0, (context.state.off - context.state.on - 5100) / 1.38));
 
@@ -107,6 +113,8 @@ exports.Machine = function (config, controller, monitoring) {
     }
 
     function _scored() {
+        if (!context.start) { return }
+
         context.state.score++;
     }
     

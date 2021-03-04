@@ -166,7 +166,6 @@ exports.Stats = function Stats(layout) {
     let score = 0;
 
     function update(data) {
-        // console.log(data);
         score = data.lastScore > 0 ? data.lastScore : score;
         component.setContent(`\
 current network:    ${ data.current }  \n\

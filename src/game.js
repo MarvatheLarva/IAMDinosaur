@@ -120,12 +120,12 @@ async function execution(config) {
     gate
         .on('capture_match', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : context.captures.gate.push(capture))
         .on('capture_terminate', (capture) => !(Number(process.env.GATE_CAPTURE)) ? null : context.captures.gate.push(capture))
+        .on('capture_warning', (capture) => context.capture.warning.push(capture))
         .on('terminate', (target) => context.targets.push(target))
-        .on('warning', (capture) => {context.capture.warning.push(capture)})
         .on('reload', async () => {
+            controller.stop();
             gate.stop();
             distance.stop();
-            controller.stop();
 
             monitoring.logger('{yellow-fg}##### GAME RELOAD #####{/yellow-fg}');
             monitoring.logger('');
@@ -134,7 +134,7 @@ async function execution(config) {
             await saveCaptures(context.captures.gate, 'GATE', `${__dirname}/../captures/gate/`, monitoring);
             await saveCaptures(context.captures.distance, 'DISTANCE', `${__dirname}/../captures/distance/`, monitoring);
 
-            await require('util').promisify(setTimeout)(3000);
+            await sleep(3000);
 
             process.exit(1);
         })
@@ -156,12 +156,14 @@ async function execution(config) {
             await saveCaptures(context.captures.gate, 'GATE', `${__dirname}/../captures/gate/`, monitoring);
             await saveCaptures(context.captures.distance, 'DISTANCE', `${__dirname}/../captures/distance/`, monitoring);
 
-            await require('util').promisify(setTimeout)(3000);
+            await sleep(3000);
 
             process.exit(1);
         })
         .on('scored', () => {
-            machine.scored();
+            setTimeout(() => {
+                machine.scored();
+            }, 3000)
         })
         .start(context.targets);
 }

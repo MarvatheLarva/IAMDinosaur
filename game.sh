@@ -1,1 +1,0 @@
-while true; do node ./src/game.js; sleep 2; done
