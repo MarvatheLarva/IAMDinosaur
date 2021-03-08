@@ -35,7 +35,7 @@ exports.Gate = function (config, controller, monitoring) {
         const duration = context.state.activate.off - context.state.activate.on;
         const { width, height, origin } = captureDetails();
         
-        return ({ origin, height, width, speed: width/duration });
+        return ({ origin, height, width });
     }
   
     function captureDetails() {
@@ -56,7 +56,7 @@ exports.Gate = function (config, controller, monitoring) {
 
             emitter.emit('capture_warning', capture);
 
-            throw new Error();
+            // throw new Error();
         }
 
         const width = matches.right - matches.left;
@@ -158,7 +158,8 @@ exports.Gate = function (config, controller, monitoring) {
         context.state.activate.off = Date.now();
         
         try {
-            context.emitter.emit('terminate', computeState());
+            const target = computeState();
+            context.emitter.emit('terminate', target);
             monitoring.logger(`[GATE] -> terminate`);
         } catch (e) {
             context.emitter.emit('reload');

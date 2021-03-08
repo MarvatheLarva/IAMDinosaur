@@ -2,12 +2,12 @@ exports.Genetics = function(config, monitoring) {
     function crossOver(netA, netB) {
         monitoring.logger(`[MACHINE][genetics] -> crossOver`);
 
-        // // Swap (50% prob.)
-        // if (Math.random() > 0.5) {
-        //     var tmp = netA;
-        //     netA = netB;
-        //     netB = tmp;
-        // }
+        // Swap (50% prob.)
+        if (Math.random() > 0.5) {
+            var tmp = netA;
+            netA = netB;
+            netB = tmp;
+        }
         
         // Cross over data keys
         crossOverDataKey(netA.neurons, netB.neurons, 'bias');

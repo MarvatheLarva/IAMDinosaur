@@ -22,7 +22,7 @@ exports.Controller = function(config, monitoring) {
 
                 context.jumpToggle = setTimeout(() => {
                     context.jumpToggle = null;
-                }, 50)
+                }, 100)
             }
 
             context.crouchToggle = clearTimeout(context.crouchToggle);

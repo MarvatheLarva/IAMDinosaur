@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const { PROBE } = require('./monitoring');
 const { converters } = require('./utils');
 
 // Config Sensors Monitoring
@@ -22,7 +23,7 @@ const configMonitoring = {
         distanceMetter: {
             active: !!Number(process.env.DISTANCE_METTER),
         }
-    }
+    },
 }
 
 // Config
@@ -34,8 +35,21 @@ const config = {
         address: process.env.MONITORING_SERVER_ADDRESS,
         port: Number(process.env.MONITORING_SERVER_PORT)
     },
+    player: {
+        frequency: Number(process.env.PLAYER_FREQUENCY),
+        scanner: {
+            vertical: {
+                size: { width: Number(process.env.PLAYER_VERTICAL_SIZE_WIDTH), height: Number(process.env.PLAYER_VERTICAL_SIZE_HEIGHT) },
+                position: { x: Number(process.env.PLAYER_VERTICAL_POSITION_X), y: Number(process.env.PLAYER_VERTICAL_POSITION_Y) },
+            },
+            horizontal: {
+                size: { width: Number(process.env.PLAYER_HORIZONTAL_SIZE_WIDTH), height: Number(process.env.PLAYER_HORIZONTAL_SIZE_HEIGHT) },
+                position: { x: Number(process.env.PLAYER_HORIZONTAL_POSITION_X), y: Number(process.env.PLAYER_HORIZONTAL_POSITION_Y) },
+            }
+        }
+    },
     gate: {
-        capture: Number(process.env.GATE_CAPTURE),
+        capture: Number(process.env.PLAYER_VERTICAL_CAPTURE),
         frequency: Number(process.env.GATE_FREQUENCY),
         compressor: Number(process.env.GATE_COMPRESSOR),
         position: { x: Number(process.env.GATE_POSITION_X), y: Number(process.env.GATE_POSITION_Y) },
@@ -59,7 +73,7 @@ const config = {
         size: { width: Number(process.env.DISTANCE_SIZE_WIDTH), height: Number(process.env.DISTANCE_SIZE_HEIGHT) },
         tracker: { colors: process.env.TRACKING_COLORS.split(', ') },
         monitoring: configMonitoring.distance,
-        controller: { mouse: Number(process.env.GATE_MOUSE) }
+        controller: { mouse: Number(process.env.DISTANCE_MOUSE) }
     },
     machine: { 
         network: { 
@@ -72,13 +86,13 @@ const config = {
                 height: Number(process.env.MACHINE_MAX_HEIGHT),
                 origin: Number(process.env.DISTANCE_MAX_ORIGIN),
                 distance: Number(process.env.MACHINE_MAX_DISTANCE),
-                speed: Number(process.env.MACHINE_MAX_SPEED)
+                speed: Number(process.env.MACHINE_MAX_SPEED),
+                player: Number(process.env.PLAYER_MAX_ORIGIN)
             }
         },
         monitoring: configMonitoring.machine
     },
-    controller: {}
 }
 
-exports.configMonitoring;
-exports.config;
+exports.configMonitoring = configMonitoring;
+exports.config = config;

@@ -1,6 +1,6 @@
 const { config } = require('./config');
-const { Client, PROBE } = require('./monitoring');
-const { Gate, Distance } = require('./sensor');
+const { Client } = require('./monitoring');
+const { Player, Gate, Distance } = require('./sensor');
 const { Machine } = require('./machine');
 const { Controller } = require('./robot');
 const { saveCaptures } = require('./utils');
@@ -12,6 +12,7 @@ const sleep = require('util').promisify(setTimeout)
 async function execution(config) {  
     const context = { 
         targets: [],
+        results: [],
         captures: {
             gate: [],
             distance: [],
@@ -21,6 +22,7 @@ async function execution(config) {
     
     const monitoring = Client(config.monitoring);
     const controller = Controller(config.controller, monitoring);
+    const player = Player(config.player, controller, monitoring);
     const gate = Gate(config.gate, controller, monitoring);
     const distance = Distance(config.distance, controller, monitoring);
     const machine = Machine(config.machine, controller, monitoring);
@@ -37,6 +39,11 @@ async function execution(config) {
     monitoring.logger('{green-fg}##### GAME START #####{/green-fg}');
     
     machine
+        .on('result', (result) => context.results.push(result))
+        .start();
+
+    player
+        .on('origin', (origin) => machine.update({ player: origin }))
         .start();
 
     gate
@@ -52,6 +59,7 @@ async function execution(config) {
             monitoring.logger('{yellow-fg}##### GAME RELOAD #####{/yellow-fg}');
             monitoring.logger('');
 
+            require('fs').writeFileSync(`${__dirname}/../main.logs`, JSON.stringify(context.results));
             await saveCaptures(context.captures.warning, 'WARNING', `${__dirname}/../captures/warning/`, monitoring);
             await saveCaptures(context.captures.gate, 'GATE', `${__dirname}/../captures/gate/`, monitoring);
             await saveCaptures(context.captures.distance, 'DISTANCE', `${__dirname}/../captures/distance/`, monitoring);
@@ -65,7 +73,7 @@ async function execution(config) {
     distance
         .on('capture', (capture) => !(config.distance.capture) ? null : context.captures.distance.push(capture))
         .on('initialize', (target) => machine.initialize(target) )
-        .on('distance', (distance) => machine.play({ distance }) )
+        .on('distance', (distance, speed) => machine.play({ distance, speed }) )
         .on('timeout', async () => {
             gate.stop();
             distance.stop();
@@ -74,6 +82,9 @@ async function execution(config) {
             monitoring.logger('{red-fg}##### GAME OVER #####{/red-fg}');
             monitoring.logger('');
 
+            console.log(context.results);
+
+            require('fs').writeFileSync('../main.logs', JSON.stringify(context.results));
             await saveCaptures(context.captures.warning, 'WARNING', `${__dirname}/../captures/warning/`, monitoring);
             await saveCaptures(context.captures.gate, 'GATE', `${__dirname}/../captures/gate/`, monitoring);
             await saveCaptures(context.captures.distance, 'DISTANCE', `${__dirname}/../captures/distance/`, monitoring);
@@ -83,9 +94,7 @@ async function execution(config) {
             process.exit(1);
         })
         .on('scored', () => {
-            setTimeout(() => {
-                machine.scored();
-            }, 3000)
+            machine.scored();
         })
         .start(context.targets);
 }

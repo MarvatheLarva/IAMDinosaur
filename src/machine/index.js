@@ -1,10 +1,11 @@
-
+const { EventEmitter } = require('events');
 const { Networks } = require('./networks');
 
 exports.Machine = function (config, controller, monitoring) {
     const networks = Networks(config.network, monitoring);
 
     const context = {
+        emitter: new EventEmitter(),
         network: null,
         location: null,
         start: false,
@@ -13,11 +14,11 @@ exports.Machine = function (config, controller, monitoring) {
             off: null,
             score: 0,
             inputs: {
-                width: null,
-                height: null,
-                speed: null,
-                origin: null,
-                distance: null
+                width: 0,
+                height: 0,
+                speed: 0,
+                origin: 0,
+                distance: 0
             }
         }
     };
@@ -29,11 +30,11 @@ exports.Machine = function (config, controller, monitoring) {
         context.state.on = null;
         context.state.off = null;
         context.state.inputs = {
-            width: null,
-            height: null,
-            speed: null,
-            origin: null,
-            distance: null
+            width: 0,
+            height: 0,
+            speed: 0,
+            origin: 0,
+            distance: 0
         };
     }
 
@@ -61,8 +62,15 @@ exports.Machine = function (config, controller, monitoring) {
         'stop': _stop,
         'initialize': _initialize,
         'play': _play,
-        'scored': _scored
+        'update': _update,
+        'scored': _scored,
+        'on': _on
     });
+
+    function _on(e, f) {
+        context.emitter.on(e, f);
+        return self();
+    }
 
     function _start() {
         monitoring.logger(`[MACHINE] -> start`);
@@ -108,6 +116,7 @@ exports.Machine = function (config, controller, monitoring) {
         monitoring.logger(`[MACHINE] -> initialize`);
 
         computeInputs(Object.assign({}, rawInputs, { distance: null }));
+        // console.log('MACHINE INIT', context.state.inputs);
 
         monitoring.logger(`[MACHINE] -> inputs {blue-fg}${JSON.stringify(context.state.inputs)}{/blue-fg}`);
     }
@@ -115,16 +124,23 @@ exports.Machine = function (config, controller, monitoring) {
     function _scored() {
         if (!context.start) { return }
 
+        monitoring.logger('[MACHINE] -> scored');
+
         context.state.score++;
+    }
+
+    function _update(rawInputs) {
+        computeInputs(rawInputs);
     }
     
     function _play(rawInputs) {
         computeInputs(rawInputs);
-        
+        // console.log(rawInputs);
         // activate network
         const inputs = Object.values(context.state.inputs);
         const [output] = context.network.activate(inputs);
-
+        context.emitter.emit('result', ({input: Object.values(context.state.inputs), output: [output]}));
+        // console.log({distance: context.state.inputs.distance})
         if (output > 0.55) controller.jump();
         if (output < 0.45) controller.crouch();
     }
